@@ -1,10 +1,17 @@
 ﻿namespace OLX_web_api.DTO
 {
+
     public class QueryData
     {
         public List<Data> Data { get; set; }
         //public Metadata Metadata { get; set; }
         //public Links Links { get; set; }
+
+
+        public QueryData()
+        {
+            Data = new List<Data>();
+        }
     }
 
     public class Data

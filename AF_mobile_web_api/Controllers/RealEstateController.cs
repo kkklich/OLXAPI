@@ -24,7 +24,7 @@ namespace OLX_web_api.Controllers
         {
             try
             {
-                var result = await _realEstate.GetDefaultResponse();
+                var result = await _realEstate.GetMoreResponse();
                 return Ok(result);
             }
             catch (Exception ex)
