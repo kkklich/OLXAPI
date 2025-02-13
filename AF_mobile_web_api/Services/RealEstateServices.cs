@@ -13,14 +13,6 @@ namespace OLX_web_api.Services
             _httpClient = httpClient;
         }
 
-
-        //public static async Task<string> FetchOlxOffers(int offset = 0, int limit = 40, int categoryId = 14, int regionId = 4, int cityId = 8959, int priceFrom = 50000, int priceTo = 250000)
-        //{
-        //    string url = $"https://www.olx.pl/api/v1/offers/?offset=" +
-        //        $"{offset}&limit={limit}&category_id={categoryId}&region_id={regionId}&city_id={cityId}&filter_float_price%3Afrom={priceFrom}&filter_float_price%3Ato={priceTo}";
-
-
-
         public async Task<QueryData> GetDefaultResponse(int offset = 0, int limit = 40, int priceFrom = 50000, int priceTo = 250000)
         {
             int categoryId = 14;
@@ -28,7 +20,7 @@ namespace OLX_web_api.Services
             int cityId = 8959;
 
             var realEstateQuery = ConstantHelper.OLXAPI;
-            
+
             var queryParams = $"?offset={offset}" +
                 $"&limit={limit}" +
                 $"&category_id={categoryId}" +
@@ -65,7 +57,7 @@ namespace OLX_web_api.Services
             {
                 for (int i = 0; i < 25; i++)
                 {
-                    var response = await GetDefaultResponse(i * limit, limit, (200000 * j) + 50000, (200000* j) + 250000);
+                    var response = await GetDefaultResponse(i * limit, limit, (200000 * j) + 50000, (200000 * j) + 250000);
                     query.Data.AddRange(response.Data);
 
                     await Task.Delay(60);
@@ -73,6 +65,26 @@ namespace OLX_web_api.Services
                 }
                 var xd = totalQuantityResult;
             }
+
+            query.Data = query.Data.GroupBy(o => o.Id).Select(g => g.First()).OrderBy(x => x.created_time).ToList();
+
+            query.metadata = new Metadata();
+            query.metadata.visible_total_count = totalQuantityResult;
+            query.metadata.total_elements = query.Data.Count;
+
+            //int i = 0;
+            //int executedQuery = 0;
+            //do
+            //{
+            //    var response = await GetDefaultResponse(i * limit, limit);
+            //    query.Data.AddRange(response.Data);
+
+            //    await Task.Delay(500);
+            //    totalQuantityResult = response.metadata.visible_total_count;
+            //    //executedQuery += response.Data.Count;
+            //    i ++;
+            //} while (query.Data.Count < totalQuantityResult);
+
 
             query.Data = query.Data.GroupBy(o => o.Id).Select(g => g.First()).OrderBy(x => x.created_time).ToList();
 
