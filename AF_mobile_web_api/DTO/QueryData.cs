@@ -4,7 +4,7 @@
     public class QueryData
     {
         public List<Data> Data { get; set; }
-        //public Metadata Metadata { get; set; }
+        public Metadata metadata { get; set; }
         //public Links Links { get; set; }
 
 
@@ -20,7 +20,7 @@
         public string Url { get; set; }
         public string Title { get; set; }
         //public DateTime LastRefreshTime { get; set; }
-        //public DateTime CreatedTime { get; set; }
+        public DateTime created_time { get; set; }
         //public DateTime ValidToTime { get; set; }
         //public object PushupTime { get; set; }
         //public string Description { get; set; }
@@ -172,12 +172,12 @@
 
     public class Metadata
     {
-        public int TotalElements { get; set; }
-        public int VisibleTotalCount { get; set; }
-        public List<object> Promoted { get; set; }
-        public string SearchId { get; set; }
-        public Adverts Adverts { get; set; }
-        public Source Source { get; set; }
+        public int total_elements { get; set; }
+        public int visible_total_count { get; set; }
+        //public List<object> Promoted { get; set; }
+        //public string SearchId { get; set; }
+        //public Adverts Adverts { get; set; }
+        //public Source Source { get; set; }
     }
 
     public class Adverts
