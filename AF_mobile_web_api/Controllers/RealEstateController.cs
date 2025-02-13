@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using OLX_web_api.Services;
+using AF_mobile_web_api.Services;
 
-namespace OLX_web_api.Controllers
+namespace AF_mobile_web_api.Controllers
 { 
     [Route("api/[controller]")]
     public class RealEstateController : ControllerBase

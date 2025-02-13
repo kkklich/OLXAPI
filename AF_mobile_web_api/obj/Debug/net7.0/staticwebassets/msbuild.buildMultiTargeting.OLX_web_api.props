@@ -1,0 +1,3 @@
+﻿<Project>
+  <Import Project="..\build\OLX_web_api.props" />
+</Project>

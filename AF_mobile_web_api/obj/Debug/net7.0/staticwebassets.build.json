@@ -1,0 +1,12 @@
+{
+  "Version": 1,
+  "Hash": "tB9gjB9YxTAgUFqacOuTXKMJK9n/+b/zOpmlCkLRgSU=",
+  "Source": "AF_mobile_web_api",
+  "BasePath": "_content/AF_mobile_web_api",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": [],
+  "Endpoints": []
+}
