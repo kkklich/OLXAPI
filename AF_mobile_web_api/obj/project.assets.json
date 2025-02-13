@@ -7836,9 +7836,9 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\kklic\\source\\repos\\OLXAPI\\AF_mobile_web_api\\OLX_web_api.csproj",
-      "projectName": "OLX_web_api",
-      "projectPath": "C:\\Users\\kklic\\source\\repos\\OLXAPI\\AF_mobile_web_api\\OLX_web_api.csproj",
+      "projectUniqueName": "C:\\Users\\kklic\\source\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+      "projectName": "AF_mobile_web_api",
+      "projectPath": "C:\\Users\\kklic\\source\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
       "packagesPath": "C:\\Users\\kklic\\.nuget\\packages\\",
       "outputPath": "C:\\Users\\kklic\\source\\repos\\OLXAPI\\AF_mobile_web_api\\obj\\",
       "projectStyle": "PackageReference",

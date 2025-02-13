@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "xlyAan8MT5c=",
+  "dgSpecHash": "JRQtfDYPQGk=",
   "success": true,
-  "projectFilePath": "C:\\Users\\kklic\\source\\repos\\OLXAPI\\AF_mobile_web_api\\OLX_web_api.csproj",
+  "projectFilePath": "C:\\Users\\kklic\\source\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\kklic\\.nuget\\packages\\azure.core\\1.35.0\\azure.core.1.35.0.nupkg.sha512",
     "C:\\Users\\kklic\\.nuget\\packages\\azure.identity\\1.10.3\\azure.identity.1.10.3.nupkg.sha512",

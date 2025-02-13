@@ -1,8 +1,8 @@
 {
   "Version": 1,
-  "Hash": "q0pji5tGdcW6WHTd2dn7OfOSVZ2KxvrHW0UHizB/ohY=",
-  "Source": "OLX_web_api",
-  "BasePath": "_content/OLX_web_api",
+  "Hash": "tB9gjB9YxTAgUFqacOuTXKMJK9n/+b/zOpmlCkLRgSU=",
+  "Source": "AF_mobile_web_api",
+  "BasePath": "_content/AF_mobile_web_api",
   "Mode": "Default",
   "ManifestType": "Build",
   "ReferencedProjectsConfiguration": [],

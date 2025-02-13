@@ -1,8 +1,9 @@
-﻿using Newtonsoft.Json;
-using OLX_web_api.DTO;
-using OLX_web_api.Helper;
+﻿using AF_mobile_web_api.DTO;
+using AF_mobile_web_api.Helper;
+using Newtonsoft.Json;
 
-namespace OLX_web_api.Services
+
+namespace AF_mobile_web_api.Services
 {
     public class RealEstateServices
     {

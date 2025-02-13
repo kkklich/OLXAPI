@@ -1,4 +1,4 @@
-﻿namespace OLX_web_api.DTO
+﻿namespace AF_mobile_web_api.DTO
 {
 
     public class QueryData

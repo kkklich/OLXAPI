@@ -1,6 +1,6 @@
 [
   {
-    "ContainingType": "OLX_web_api.Controllers.RealEstateController",
+    "ContainingType": "AF_mobile_web_api.Controllers.RealEstateController",
     "Method": "GetDefaultRealEstate",
     "RelativePath": "api/RealEstate/defaultRealEstate",
     "HttpMethod": "GET",
@@ -10,7 +10,7 @@
     "ReturnTypes": []
   },
   {
-    "ContainingType": "OLX_web_api.Controllers.RealEstateController",
+    "ContainingType": "AF_mobile_web_api.Controllers.RealEstateController",
     "Method": "test",
     "RelativePath": "api/RealEstate/test",
     "HttpMethod": "GET",

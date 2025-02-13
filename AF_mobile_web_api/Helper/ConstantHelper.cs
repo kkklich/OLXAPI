@@ -1,4 +1,4 @@
-﻿namespace OLX_web_api.Helper
+﻿namespace AF_mobile_web_api.Helper
 {
     public class ConstantHelper
     {
