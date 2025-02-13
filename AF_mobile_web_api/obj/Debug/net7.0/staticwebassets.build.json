@@ -1,0 +1,12 @@
+{
+  "Version": 1,
+  "Hash": "q0pji5tGdcW6WHTd2dn7OfOSVZ2KxvrHW0UHizB/ohY=",
+  "Source": "OLX_web_api",
+  "BasePath": "_content/OLX_web_api",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": [],
+  "Endpoints": []
+}

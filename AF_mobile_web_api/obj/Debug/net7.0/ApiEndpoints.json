@@ -1,0 +1,22 @@
+[
+  {
+    "ContainingType": "OLX_web_api.Controllers.RealEstateController",
+    "Method": "GetDefaultRealEstate",
+    "RelativePath": "api/RealEstate/defaultRealEstate",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "OLX_web_api.Controllers.RealEstateController",
+    "Method": "test",
+    "RelativePath": "api/RealEstate/test",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  }
+]
