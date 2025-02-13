@@ -7,8 +7,7 @@ namespace OLX_web_api.Services
     public class RealEstateServices
     {
         private readonly HTTPClientServices _httpClient;
-        //public RealEstateServices()
-        //{
+       
         public RealEstateServices(HTTPClientServices httpClient)
         {
             _httpClient = httpClient;
@@ -87,6 +86,26 @@ namespace OLX_web_api.Services
             //} while (query.Data.Count < totalQuantityResult);
 
 
+            query.Data = query.Data.GroupBy(o => o.Id).Select(g => g.First()).OrderBy(x => x.created_time).ToList();
+
+            query.metadata = new Metadata();
+            query.metadata.visible_total_count = totalQuantityResult;
+            query.metadata.total_elements = query.Data.Count;
+
+            //int i = 0;
+            //int executedQuery = 0;
+            //do
+            //{
+            //    var response = await GetDefaultResponse(i * limit, limit);
+            //    query.Data.AddRange(response.Data);
+
+            //    await Task.Delay(500);
+            //    totalQuantityResult = response.metadata.visible_total_count;
+            //    //executedQuery += response.Data.Count;
+            //    i ++;
+            //} while (query.Data.Count < totalQuantityResult);
+
+         
             return query;
         }
     }

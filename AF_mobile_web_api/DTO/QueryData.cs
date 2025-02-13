@@ -42,15 +42,15 @@
         //public string OfferType { get; set; }
     }
 
-    //public class Promotion
-    //{
-    //    public bool Highlighted { get; set; }
-    //    public bool Urgent { get; set; }
-    //    public bool TopAd { get; set; }
-    //    public List<object> Options { get; set; }
-    //    public bool B2cAdPage { get; set; }
-    //    public bool PremiumAdPage { get; set; }
-    //}
+    public class Promotion
+    {
+        public bool Highlighted { get; set; }
+        public bool Urgent { get; set; }
+        public bool TopAd { get; set; }
+        public List<object> Options { get; set; }
+        public bool B2cAdPage { get; set; }
+        public bool PremiumAdPage { get; set; }
+    }
 
     public class Param
     {
