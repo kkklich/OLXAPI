@@ -173,11 +173,11 @@
     public class Metadata
     {
         public int total_elements { get; set; }
-        public int visible_total_count { get; set; }        
-        public List<object> Promoted { get; set; }
-        public string SearchId { get; set; }
-        public Adverts Adverts { get; set; }
-        public Source Source { get; set; }
+        public int visible_total_count { get; set; }
+        //public List<object> Promoted { get; set; }
+        //public string SearchId { get; set; }
+        //public Adverts Adverts { get; set; }
+        //public Source Source { get; set; }
     }
 
     public class Adverts
