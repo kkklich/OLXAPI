@@ -1,6 +1,6 @@
 ﻿using Newtonsoft.Json;
 
-namespace OLX_web_api.Services
+namespace AF_mobile_web_api.Services
 {
     public class HTTPClientServices
     {
