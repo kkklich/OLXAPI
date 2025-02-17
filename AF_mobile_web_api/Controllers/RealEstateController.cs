@@ -20,11 +20,11 @@ namespace AF_mobile_web_api.Controllers
 
 
         [HttpGet("defaultRealEstate")]
-        public async Task<IActionResult> GetDefaultRealEstate()
+        public async Task<IActionResult> GetDefaultRealEstate([FromQuery] int? floorSelect, [FromQuery] int? minPrice, [FromQuery] int? maxPrice, [FromQuery] int? minArea, [FromQuery] int? maxArea)
         {
             try
             {
-                var result = await _realEstate.GetMoreResponse();
+                var result = await _realEstate.GetMoreResponse(floorSelect, minPrice, maxPrice, minArea, maxArea);
                 return Ok(result);
             }
             catch (Exception ex)
