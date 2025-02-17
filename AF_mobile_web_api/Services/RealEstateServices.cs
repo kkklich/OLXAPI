@@ -1,4 +1,6 @@
-﻿using AF_mobile_web_api.DTO;
+﻿using System.Globalization;
+using System.Text.RegularExpressions;
+using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.Helper;
 using Newtonsoft.Json;
 
@@ -49,120 +51,143 @@ namespace AF_mobile_web_api.Services
             return data;
         }
 
-        public async Task<QueryData> GetMoreResponse()
+        public async Task<SearchResults> GetMoreResponse()
         {
-            QueryData query = new QueryData();
+            SearchResults results = new SearchResults();
             int limit = 40;
             int totalQuantityResult = 0;
-            for (int j = 0; j < 1; j++)//4
+            int A = 100000;
+            int B = 800000;
+
+            int step = 200000;
+            for (int j = 0; j < (B - A) / step; j++)
             {
-                for (int i = 0; i < 1; i++)//25
+                for (int i = 0; i < 25; i++)
                 {
-                    var response = await GetDefaultResponse(i * limit, limit, (200000 * j) + 50000, (200000 * j) + 250000);
-                    query.Data.AddRange(response.Data);
+                    int startRange = A + (step * j);
+                    int endRange = startRange + step;
+                    var response = await GetDefaultResponse(i * limit, limit, startRange, endRange);
 
-                    //await Task.Delay(60);
 
-                    ExtractListOfParameters(response.Data);
+                    await Task.Delay(20);
 
-                    totalQuantityResult = response.metadata.visible_total_count;
+                    var extractedData = ExtractListOfParameters(response.Data);
+                    results.Data.AddRange(extractedData);
+
+                    if (response.metadata.visible_total_count > totalQuantityResult)
+                        totalQuantityResult = response.metadata.visible_total_count;
+
                 }
-                var xd = totalQuantityResult;
             }
 
-            query.Data = query.Data.GroupBy(o => o.Id).Select(g => g.First()).OrderBy(x => x.created_time).ToList();
-
-            query.metadata = new Metadata();
-            query.metadata.visible_total_count = totalQuantityResult;
-            query.metadata.total_elements = query.Data.Count;
-
-            //int i = 0;
-            //int executedQuery = 0;
-            //do
+            //100 000 -> 900 000
+            //for (int j = 0; j < 4; j++)//4
             //{
-            //    var response = await GetDefaultResponse(i * limit, limit);
-            //    query.Data.AddRange(response.Data);
+            //    for (int i = 0; i < 25; i++)//25
+            //    {
+            //        var response = await GetDefaultResponse(i * limit, limit, (200000 * j) + 50000, (200000 * j) + 250000);
 
-            //    await Task.Delay(500);
-            //    totalQuantityResult = response.metadata.visible_total_count;
-            //    //executedQuery += response.Data.Count;
-            //    i ++;
-            //} while (query.Data.Count < totalQuantityResult);
+            //        await Task.Delay(20);
 
+            //        var extractedData =  ExtractListOfParameters(response.Data);
+            //        results.Data.AddRange(extractedData);
 
-            query.Data = query.Data.GroupBy(o => o.Id).Select(g => g.First()).OrderBy(x => x.created_time).ToList();
+            //        if(response.metadata.visible_total_count > totalQuantityResult)
+            //            totalQuantityResult = response.metadata.visible_total_count;
+            //    }
+            //}
 
-            query.metadata = new Metadata();
-            query.metadata.visible_total_count = totalQuantityResult;
-            query.metadata.total_elements = query.Data.Count;
-
-            //int i = 0;
-            //int executedQuery = 0;
-            //do
-            //{
-            //    var response = await GetDefaultResponse(i * limit, limit);
-            //    query.Data.AddRange(response.Data);
-
-            //    await Task.Delay(500);
-            //    totalQuantityResult = response.metadata.visible_total_count;
-            //    //executedQuery += response.Data.Count;
-            //    i ++;
-            //} while (query.Data.Count < totalQuantityResult);
-
+            results.Data = results.Data.GroupBy(o => o.Id).Select(g => g.First()).OrderBy(x => x.created_time).ToList();
+            results.Total_elements = totalQuantityResult;
          
-            return query;
+            return results;
         }
 
-        private void ExtractListOfParameters(List<Data> responses)
+        private List<DataSearch> ExtractListOfParameters(List<Data> responses)
         {
+            List<DataSearch> results = new List<DataSearch>();
             foreach (var response in responses)
             {
-                var xdd = ExtractParameter(response.Params, "price_per_m");
+              
+                var resultWithParameters = ExtractParameter(response.Params);
+
+                resultWithParameters.Title = response.Title;
+                resultWithParameters.created_time = response.created_time;
+                resultWithParameters.Id = response.Id;
+                resultWithParameters.Url = response.Url;
+
+                results.Add(resultWithParameters);
             }
+
+            return results;
         }
 
 
-        private string ExtractParameter(List<Param> parameters, string parameterName)
+        private DataSearch ExtractParameter(List<Param> parameters)
         {
+            DataSearch extractedResult = new DataSearch();
             foreach (var param in parameters)
             {
-                //if (param.Key == parameterName)
-                //{
-                //    return param.Value.Key;                    
-                //}
-
-                //foreach(var item in param)
-
                 switch (param.Key)
                 {
                     case "price_per_m":
-                        var PricePerM = param.Value.Key;
+                        extractedResult.PricePerM = ExtractNumberFromString(param?.Value?.Key ?? "");
                         break;
                     case "floor_select":
-                        var FloorSelect = param.Value.Key;
+                        extractedResult.FloorSelect = ExtractNumberFromString(param?.Value?.Key ?? "");
                         break;
-                    case "furniture":
-                        var Furniture = param.Value.Key;
-                        break;
-                    case "market":
-                        var Market = param.Value.Key;
-                        break;
+                    //case "furniture":
+                    //    extractedResult.Furniture = param.Value.Key;
+                    //    break;
+                    //case "market":
+                    //    extractedResult.Market = param.Value.Key;
+                    //    break;
                     case "price":
-                        var Price = param.Value.Key; //TODO
+                        //if(param.Value.Key)
+                        var priceSelected = param.Value.Key != null ? param.Value.Key : param.Value.Label;
+                        extractedResult.Price = ExtractNumberFromString(priceSelected);
                         break;
-                    case "builttype":
-                        var BuiltType = param.Value.Key;
-                        break;
+                    //case "builttype":
+                    //    extractedResult.Builttype = param.Value.Key;
+                    //    break;
                     case "m":
-                        var Area = param.Value.Key;
+                        extractedResult.Area = ExtractNumberFromString(param?.Value?.Key ?? "");
                         break;
-                    case "rooms":
-                        var Rooms = param.Value.Key;
+                    //case "rooms":
+                    //    extractedResult.Rooms = param.Value.Key;
+                    //    break;
+                    default:
                         break;
+                }                                                                                                                                                                                                                                      
+                
+            }
+
+            return extractedResult;
+        }
+
+        public static double ExtractNumberFromString(string input)
+        {
+            //Match match = Regex.Match(input, @"\d+(\.\d+)?");
+            //if (match.Success)
+            //{
+            //    if (double.TryParse(match.Value, NumberStyles.Any, CultureInfo.InvariantCulture, out double number))
+            //    {
+            //        return number;
+            //    }
+            //}
+
+            Match match = Regex.Match(input, @"\d+([\s.,]?\d+)*");
+            if (match.Success)
+            {
+                // Remove spaces and convert to double
+                string numberString = match.Value.Replace(" ", "").Replace(",", ".");
+                if (double.TryParse(numberString, NumberStyles.Any, CultureInfo.InvariantCulture, out double number))
+                {
+                    return number;
                 }
             }
 
-            return "";
+            return 0;
         }
     }
 }
