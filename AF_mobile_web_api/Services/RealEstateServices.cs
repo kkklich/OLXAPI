@@ -56,7 +56,7 @@ namespace AF_mobile_web_api.Services
             int step = 200000;
             for (int j = 0; j < (B - A) / step; j++)
             {
-                for (int i = 0; i < 25; i++)//25
+                for (int i = 0; i < 25; i++)
                 {
                     int startRange = A + (step * j);
                     int endRange = startRange + step;
