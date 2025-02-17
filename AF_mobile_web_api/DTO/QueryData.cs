@@ -25,7 +25,7 @@
         //public object PushupTime { get; set; }
         //public string Description { get; set; }
         //public Promotion Promotion { get; set; }
-        //public List<Param> Params { get; set; }
+        public List<Param> Params { get; set; }
         //public List<string> KeyParams { get; set; }
         //public bool Business { get; set; }
         //public User User { get; set; }

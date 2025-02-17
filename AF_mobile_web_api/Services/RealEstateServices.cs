@@ -54,14 +54,17 @@ namespace AF_mobile_web_api.Services
             QueryData query = new QueryData();
             int limit = 40;
             int totalQuantityResult = 0;
-            for (int j = 0; j < 4; j++)
+            for (int j = 0; j < 1; j++)//4
             {
-                for (int i = 0; i < 25; i++)
+                for (int i = 0; i < 1; i++)//25
                 {
                     var response = await GetDefaultResponse(i * limit, limit, (200000 * j) + 50000, (200000 * j) + 250000);
                     query.Data.AddRange(response.Data);
 
-                    await Task.Delay(60);
+                    //await Task.Delay(60);
+
+                    ExtractListOfParameters(response.Data);
+
                     totalQuantityResult = response.metadata.visible_total_count;
                 }
                 var xd = totalQuantityResult;
@@ -108,6 +111,58 @@ namespace AF_mobile_web_api.Services
 
          
             return query;
+        }
+
+        private void ExtractListOfParameters(List<Data> responses)
+        {
+            foreach (var response in responses)
+            {
+                var xdd = ExtractParameter(response.Params, "price_per_m");
+            }
+        }
+
+
+        private string ExtractParameter(List<Param> parameters, string parameterName)
+        {
+            foreach (var param in parameters)
+            {
+                //if (param.Key == parameterName)
+                //{
+                //    return param.Value.Key;                    
+                //}
+
+                //foreach(var item in param)
+
+                switch (param.Key)
+                {
+                    case "price_per_m":
+                        var PricePerM = param.Value.Key;
+                        break;
+                    case "floor_select":
+                        var FloorSelect = param.Value.Key;
+                        break;
+                    case "furniture":
+                        var Furniture = param.Value.Key;
+                        break;
+                    case "market":
+                        var Market = param.Value.Key;
+                        break;
+                    case "price":
+                        var Price = param.Value.Key; //TODO
+                        break;
+                    case "builttype":
+                        var BuiltType = param.Value.Key;
+                        break;
+                    case "m":
+                        var Area = param.Value.Key;
+                        break;
+                    case "rooms":
+                        var Rooms = param.Value.Key;
+                        break;
+                }
+            }
+
+            return "";
         }
     }
 }
