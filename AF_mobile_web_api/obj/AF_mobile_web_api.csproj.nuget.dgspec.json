@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\kklic\\source\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj": {}
+    "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj": {}
   },
   "projects": {
-    "C:\\Users\\kklic\\source\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj": {
+    "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\kklic\\source\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+        "projectUniqueName": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
         "projectName": "AF_mobile_web_api",
-        "projectPath": "C:\\Users\\kklic\\source\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+        "projectPath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
         "packagesPath": "C:\\Users\\kklic\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\kklic\\source\\repos\\OLXAPI\\AF_mobile_web_api\\obj\\",
+        "outputPath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages",
@@ -27,9 +27,7 @@
         ],
         "sources": {
           "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
-          "C:\\Program Files\\dotnet\\library-packs": {},
-          "https://api.nuget.org/v3/index.json": {},
-          "https://gitlab.demonstrator.eu/api/v4/projects/187/packages/nuget/index.json": {}
+          "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
           "net7.0": {
@@ -46,7 +44,8 @@
           "enableAudit": "true",
           "auditLevel": "low",
           "auditMode": "all"
-        }
+        },
+        "SdkAnalysisLevel": "9.0.100"
       },
       "frameworks": {
         "net7.0": {
@@ -112,12 +111,6 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
-          "downloadDependencies": [
-            {
-              "name": "Microsoft.Net.Sdk.Compilers.Toolset",
-              "version": "[9.0.103, 9.0.103]"
-            }
-          ],
           "frameworkReferences": {
             "Microsoft.AspNetCore.App": {
               "privateAssets": "none"
@@ -126,7 +119,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.103\\RuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.100\\RuntimeIdentifierGraph.json"
         }
       }
     }
