@@ -11,7 +11,6 @@
         }
     }
 
-
     public class SearchData
     {
         public long Id { get; set; }
