@@ -56,6 +56,7 @@ namespace AF_mobile_web_api.Services
                 }
             }
 
+            searcheddata.Data = searcheddata.Data.DistinctBy(x => x.Id).OrderBy(x => x.PricePerMeter).ToList();
             searcheddata.TotalCount = searcheddata.Data.Count;
          
             return searcheddata;
@@ -82,7 +83,7 @@ namespace AF_mobile_web_api.Services
             record.Title = data.Title;
             record.CreatedTime = data.created_time;
             record.Private = !data.Business;
-            record.Description = data.Description;
+            //record.Description = data.Description;
             record.Location = new LocationPlace() 
             {
                 City = data?.Location?.City?.Name ?? string.Empty,
@@ -91,14 +92,14 @@ namespace AF_mobile_web_api.Services
                 Lon = data?.Map?.Lon ?? 0
             };
 
-            record.Photos.AddRange(data.Photos.Select(p => new Photos
-            {
-                Id = p.Id,
-                Filename = p.Filename,
-                Width = p.Width,
-                Height = p.Height,
-                Link = p.Link
-            }));
+            //record.Photos.AddRange(data.Photos.Select(p => new Photos
+            //{
+            //    Id = p.Id,
+            //    Filename = p.Filename,
+            //    Width = p.Width,
+            //    Height = p.Height,
+            //    Link = p.Link
+            //}));
 
 
             return record;
@@ -116,8 +117,14 @@ namespace AF_mobile_web_api.Services
                             data.Price = ParsePriceToDouble(param.Value?.Label);
                         break;
                     case ConstantHelper.PricePerMeter:
-                        if (double.TryParse(param.Value?.Key, out var pricePerM))
+                        //if (double.TryParse(param.Value?.Key, out var pricePerM))
+                        //    data.PricePerMeter = pricePerM;
+
+                        if (double.TryParse(param.Value?.Key, NumberStyles.Any, CultureInfo.InvariantCulture, out var pricePerM))
                             data.PricePerMeter = pricePerM;
+
+                        if (pricePerM == 0)
+                            data.PricePerMeter = data.Price / data.Area;
                         break;
                     case ConstantHelper.FloorSelect:
                         if (int.TryParse(param.Value?.Label, out var floor))
