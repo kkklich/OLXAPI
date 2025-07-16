@@ -13,7 +13,7 @@ namespace AF_mobile_web_api.Controllers
         }
 
         [HttpGet("defaultRealEstate")]
-        public async Task<IActionResult> GetDefaultRealEstate()
+        public async Task<IActionResult> GetDefaultRealEstate([FromQuery] int? floorSelect, [FromQuery] int? minPrice, [FromQuery] int? maxPrice, [FromQuery] int? minArea, [FromQuery] int? maxArea)
         {
             try
             {

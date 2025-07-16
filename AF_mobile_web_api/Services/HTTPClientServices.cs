@@ -35,7 +35,6 @@ namespace AF_mobile_web_api.Services
             }
         }
 
-
         public async Task<HttpResponseMessage> GetRaw(string url, bool withToken = true, double? timeoutInSeconds = null)
         {
             try
