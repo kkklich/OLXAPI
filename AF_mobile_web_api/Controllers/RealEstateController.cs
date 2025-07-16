@@ -12,13 +12,6 @@ namespace AF_mobile_web_api.Controllers
             _realEstate = realEstate;
         }
 
-        [HttpGet("test")]
-        public async Task<IActionResult> test()
-        {
-            return Ok("work");
-        }
-
-
         [HttpGet("defaultRealEstate")]
         public async Task<IActionResult> GetDefaultRealEstate()
         {
