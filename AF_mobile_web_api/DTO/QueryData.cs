@@ -23,16 +23,17 @@
         public DateTime created_time { get; set; }
         //public DateTime ValidToTime { get; set; }
         //public object PushupTime { get; set; }
-        //public string Description { get; set; }
+        public string Description { get; set; }
         //public Promotion Promotion { get; set; }
         public List<Param> Params { get; set; }
         //public List<string> KeyParams { get; set; }
-        //public bool Business { get; set; }
+        public bool Business { get; set; }
+        public Map Map { get; set; }
         //public User User { get; set; }
         //public string Status { get; set; }
         //public Contact Contact { get; set; }
-        //public Location Location { get; set; }
-        //public List<Photo> Photos { get; set; }
+        public List<Photo> Photos { get; set; }
+        public Location Location { get; set; }
         //public Partner Partner { get; set; }
         //public string ExternalUrl { get; set; }
         //public Category Category { get; set; }
@@ -86,6 +87,12 @@
     //    public object SellerType { get; set; }
     //    public string Uuid { get; set; }
     //}
+
+    public class Map
+    {
+        public double Lat { get; set; }
+        public double Lon { get; set; }
+    }
 
     public class Contact
     {

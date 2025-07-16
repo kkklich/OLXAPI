@@ -16,9 +16,9 @@ namespace AF_mobile_web_api.Services
 
         public async Task<QueryData> GetDefaultResponse(int offset = 0, int limit = 40, int priceFrom = 50000, int priceTo = 250000)
         {
-            int categoryId = 14;
-            int regionId = 4;
-            int cityId = 8959;
+            int categoryId = ConstantHelper.RealEstateCategory;
+            int regionId = ConstantHelper.LesserPolandRegionId;
+            int cityId = ConstantHelper.KrakowCityId;
 
             var realEstateQuery = ConstantHelper.OLXAPI;
 
@@ -30,139 +30,134 @@ namespace AF_mobile_web_api.Services
                 $"&filter_float_price%3Afrom={priceFrom}" +
                 $"&filter_float_price%3Ato={priceTo}";
 
-
-
-            //var queryParams = $"?offset={offset}" +
-            //    $"&limit={limit}" +
-            //    $"&category_id={ConstantHelper.RealEstateCategory}" +
-            //    $"&region_id={4}" +
-            //    $"&city_id={8959}";
             realEstateQuery += queryParams;
 
             var rawResponse = await _httpClient.GetRaw(realEstateQuery);
-
             var result = await rawResponse.Content.ReadAsStringAsync();
-
             var data = JsonConvert.DeserializeObject<QueryData>(result);
-
 
             return data;
         }
 
-        public async Task<QueryData> GetMoreResponse()
+        public async Task<MarketplaceSearch> GetMoreResponse()
         {
-            QueryData query = new QueryData();
+            MarketplaceSearch searcheddata = new MarketplaceSearch();
             int limit = 40;
-            int totalQuantityResult = 0;
-            for (int j = 0; j < 1; j++)//4
+            for (int j = 0; j < 4; j++)//4
             {
-                for (int i = 0; i < 1; i++)//25
+                for (int i = 0; i < 25; i++)//25
                 {
-                    var response = await GetDefaultResponse(i * limit, limit, (200000 * j) + 50000, (200000 * j) + 250000);
-                    query.Data.AddRange(response.Data);
-
-                    //await Task.Delay(60);
-
-                    ExtractListOfParameters(response.Data);
-
-                    totalQuantityResult = response.metadata.visible_total_count;
+                    var response = await GetDefaultResponse(i * limit, limit, (200000 * j) + 50000, (200000 * j) + 250000);                    
+                    var result = ExtractListOfParameters(response.Data);
+                    searcheddata.Data.AddRange(result);
                 }
-                var xd = totalQuantityResult;
             }
 
-            query.Data = query.Data.GroupBy(o => o.Id).Select(g => g.First()).OrderBy(x => x.created_time).ToList();
-
-            query.metadata = new Metadata();
-            query.metadata.visible_total_count = totalQuantityResult;
-            query.metadata.total_elements = query.Data.Count;
-
-            //int i = 0;
-            //int executedQuery = 0;
-            //do
-            //{
-            //    var response = await GetDefaultResponse(i * limit, limit);
-            //    query.Data.AddRange(response.Data);
-
-            //    await Task.Delay(500);
-            //    totalQuantityResult = response.metadata.visible_total_count;
-            //    //executedQuery += response.Data.Count;
-            //    i ++;
-            //} while (query.Data.Count < totalQuantityResult);
-
-
-            query.Data = query.Data.GroupBy(o => o.Id).Select(g => g.First()).OrderBy(x => x.created_time).ToList();
-
-            query.metadata = new Metadata();
-            query.metadata.visible_total_count = totalQuantityResult;
-            query.metadata.total_elements = query.Data.Count;
-
-            //int i = 0;
-            //int executedQuery = 0;
-            //do
-            //{
-            //    var response = await GetDefaultResponse(i * limit, limit);
-            //    query.Data.AddRange(response.Data);
-
-            //    await Task.Delay(500);
-            //    totalQuantityResult = response.metadata.visible_total_count;
-            //    //executedQuery += response.Data.Count;
-            //    i ++;
-            //} while (query.Data.Count < totalQuantityResult);
-
+            searcheddata.TotalCount = searcheddata.Data.Count;
          
-            return query;
+            return searcheddata;
         }
 
-        private void ExtractListOfParameters(List<Data> responses)
+        private List<SearchData> ExtractListOfParameters(List<Data> responses)
         {
+            List<SearchData> result = new List<SearchData>();
             foreach (var response in responses)
             {
-                var xdd = ExtractParameter(response.Params, "price_per_m");
+                var extractedObject = ExtractParameter(response);
+                result.Add(extractedObject);
             }
+
+            return result;            
         }
 
-
-        private string ExtractParameter(List<Param> parameters, string parameterName)
+        private SearchData ExtractParameter(Data data)
         {
+            var record = MapParamsToSearchData(data.Params);
+
+            record.Id = data.Id;
+            record.Url = data.Url;
+            record.Title = data.Title;
+            record.CreatedTime = data.created_time;
+            record.Private = !data.Business;
+            record.Description = data.Description;
+            record.Location = new LocationPlace() 
+            {
+                City = data?.Location?.City?.Name ?? string.Empty,
+                District = data?.Location?.District?.Name ?? string.Empty,
+                Lat = data?.Map?.Lat ??  0,
+                Lon = data?.Map?.Lon ?? 0
+            };
+
+            record.Photos.AddRange(data.Photos.Select(p => new Photos
+            {
+                Id = p.Id,
+                Filename = p.Filename,
+                Width = p.Width,
+                Height = p.Height,
+                Link = p.Link
+            }));
+
+
+            return record;
+        }
+
+        public SearchData MapParamsToSearchData(List<Param> parameters)
+        {
+            var data = new SearchData();
             foreach (var param in parameters)
             {
-                //if (param.Key == parameterName)
-                //{
-                //    return param.Value.Key;                    
-                //}
-
-                //foreach(var item in param)
-
                 switch (param.Key)
                 {
-                    case "price_per_m":
-                        var PricePerM = param.Value.Key;
+                    case ConstantHelper.Price:
+                        if (param.Value?.Label != null)
+                            data.Price = ParsePriceToDouble(param.Value?.Label);
                         break;
-                    case "floor_select":
-                        var FloorSelect = param.Value.Key;
+                    case ConstantHelper.PricePerMeter:
+                        if (double.TryParse(param.Value?.Key, out var pricePerM))
+                            data.PricePerMeter = pricePerM;
                         break;
-                    case "furniture":
-                        var Furniture = param.Value.Key;
+                    case ConstantHelper.FloorSelect:
+                        if (int.TryParse(param.Value?.Label, out var floor))
+                            data.Floor = floor;
                         break;
-                    case "market":
-                        var Market = param.Value.Key;
+                    case ConstantHelper.Market:
+                        data.Market = param.Value?.Label ?? string.Empty;
                         break;
-                    case "price":
-                        var Price = param.Value.Key; //TODO
+
+                    case ConstantHelper.BuildType:
+                        data.BuildingType = param.Value?.Label;
                         break;
-                    case "builttype":
-                        var BuiltType = param.Value.Key;
-                        break;
-                    case "m":
-                        var Area = param.Value.Key;
-                        break;
-                    case "rooms":
-                        var Rooms = param.Value.Key;
+
+                    case ConstantHelper.Area:
+                        if (double.TryParse(param.Value?.Key, System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out var area))
+                        {
+                            data.Area = area;
+                        }
                         break;
                 }
             }
 
-            return "";
+            return data;
+        }
+
+
+        private double ParsePriceToDouble(string priceString)
+        {
+            if (string.IsNullOrWhiteSpace(priceString))
+                return 0;
+
+            var cleaned = priceString.Replace("zł", "", StringComparison.OrdinalIgnoreCase)
+                                     .Replace(" ", "")
+                                     .Trim();
+
+            if (double.TryParse(cleaned, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out double result))
+            {
+                return result;
+            }
+
+            return 0;
         }
     }
 }
