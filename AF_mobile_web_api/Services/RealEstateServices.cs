@@ -46,7 +46,7 @@ namespace AF_mobile_web_api.Services
         {
             MarketplaceSearch searcheddata = new MarketplaceSearch();
             int limit = 40;
-            for (int j = 0; j < 4; j++)//4
+            for (int j = 0; j < 5; j++)//5
             {
                 for (int i = 0; i < 25; i++)//25
                 {
@@ -58,7 +58,7 @@ namespace AF_mobile_web_api.Services
 
             searcheddata.Data = searcheddata.Data.DistinctBy(x => x.Id).OrderBy(x => x.PricePerMeter).ToList();
             searcheddata.TotalCount = searcheddata.Data.Count;
-         
+
             return searcheddata;
         }
 
@@ -117,9 +117,6 @@ namespace AF_mobile_web_api.Services
                             data.Price = ParsePriceToDouble(param.Value?.Label);
                         break;
                     case ConstantHelper.PricePerMeter:
-                        //if (double.TryParse(param.Value?.Key, out var pricePerM))
-                        //    data.PricePerMeter = pricePerM;
-
                         if (double.TryParse(param.Value?.Key, NumberStyles.Any, CultureInfo.InvariantCulture, out var pricePerM))
                             data.PricePerMeter = pricePerM;
 
