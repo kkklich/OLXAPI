@@ -6,7 +6,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services
     .AddScoped<HTTPClientServices>()
-    .AddScoped<RealEstateServices>();
+    .AddScoped<RealEstateServices>()
+    .AddScoped<StatisticServices>();
 
 builder.Services.AddControllers();  
 

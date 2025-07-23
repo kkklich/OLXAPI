@@ -7,9 +7,11 @@ namespace AF_mobile_web_api.Controllers
     public class RealEstateController : ControllerBase
     {
         private readonly RealEstateServices _realEstate;
-        public RealEstateController(RealEstateServices realEstate)
+        private readonly StatisticServices _statisticServices;
+        public RealEstateController(RealEstateServices realEstate, StatisticServices statisticServices)
         {
             _realEstate = realEstate;
+            _statisticServices = statisticServices;
         }
 
         [HttpGet("defaultRealEstate")]
@@ -18,6 +20,21 @@ namespace AF_mobile_web_api.Controllers
             try
             {
                 var result = await _realEstate.GetMoreResponse();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        
+        
+        [HttpGet("RealEstateStats")]
+        public async Task<IActionResult> GetRealEstateStats()
+        {
+            try
+            {
+                var result = await _statisticServices.GetDataWithStatistics();
                 return Ok(result);
             }
             catch (Exception ex)
