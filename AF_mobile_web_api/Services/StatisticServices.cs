@@ -11,14 +11,16 @@ namespace AF_mobile_web_api.Services
             _realEstate = realEstate;
         }
 
-        public async Task<RealEstateStatistics> GetDataWithStatistics() 
+        //public async Task<RealEstateStatistics> GetDataWithStatistics() 
+        public async Task<Dictionary<int, RealEstateStatistics>> GetDataWithStatistics() 
         {
             var response = await _realEstate.GetMoreResponse();
-            return CalculateStatistics(response.Data);
+            //return CalculateStatistics(response.Data);
+            return CalculateStatisticsByFloor(response.Data);
         }
 
         private RealEstateStatistics CalculateStatistics(List<SearchData> data)
-        {            
+        {
             var stats = new RealEstateStatistics
             {
                 MedianPricePerMeter = CalculateMedianPricePerMeter(data),
@@ -29,6 +31,22 @@ namespace AF_mobile_web_api.Services
             };
 
             return stats;
+        }
+
+        public Dictionary<int, RealEstateStatistics> CalculateStatisticsByFloor(List<SearchData> data)
+        {
+            return data
+                .GroupBy(x => x.Floor)
+                .ToDictionary(
+                    g => g.Key,
+                    g => new RealEstateStatistics
+                    {
+                        MedianPricePerMeter = CalculateMedianPricePerMeter(g.ToList()),
+                        MedianPrice = CalculateAvaragePrice(g.ToList()),
+                        MedianArea = CalculateMedianArea(g.ToList()),
+                        AverageFloor = g.Average(x => (double)x.Floor),
+                        Count = g.Count()
+                    });
         }
 
         private double CalculateAvaragePrice(List<SearchData> data)
