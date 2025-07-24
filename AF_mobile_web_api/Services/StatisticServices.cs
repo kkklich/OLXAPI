@@ -15,8 +15,9 @@ namespace AF_mobile_web_api.Services
         public async Task<Dictionary<int, RealEstateStatistics>> GetDataWithStatistics() 
         {
             var response = await _realEstate.GetMoreResponse();
+
             //return CalculateStatistics(response.Data);
-            return CalculateStatisticsByFloor(response.Data);
+            return CalculateStatisticsGroupBy(response.Data);
         }
 
         private RealEstateStatistics CalculateStatistics(List<SearchData> data)
@@ -33,7 +34,7 @@ namespace AF_mobile_web_api.Services
             return stats;
         }
 
-        public Dictionary<int, RealEstateStatistics> CalculateStatisticsByFloor(List<SearchData> data)
+        public Dictionary<int, RealEstateStatistics> CalculateStatisticsGroupBy(List<SearchData> data)
         {
             return data
                 .GroupBy(x => x.Floor)
