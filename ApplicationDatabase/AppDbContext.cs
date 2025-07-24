@@ -13,5 +13,6 @@ namespace ApplicationDatabase
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
         public DbSet<WebSearchResults> WebSearchResults { get; set; }
+        public DbSet<PropertyData> PropertyData { get; set; }
     }
 }
