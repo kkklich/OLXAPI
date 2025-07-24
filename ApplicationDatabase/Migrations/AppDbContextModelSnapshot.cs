@@ -19,6 +19,65 @@ namespace ApplicationDatabase.Migrations
                 .HasAnnotation("ProductVersion", "7.0.19")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
+            modelBuilder.Entity("ApplicationDatabase.Models.PropertyData", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("AddedRecordTime")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<double>("Area")
+                        .HasColumnType("double");
+
+                    b.Property<string>("BuildingType")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("City")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("Floor")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Market")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<long>("OffertId")
+                        .HasColumnType("bigint");
+
+                    b.Property<double>("Price")
+                        .HasColumnType("double");
+
+                    b.Property<double>("PricePerMeter")
+                        .HasColumnType("double");
+
+                    b.Property<bool>("Private")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("PropertyData");
+                });
+
             modelBuilder.Entity("ApplicationDatabase.Models.WebSearchResults", b =>
                 {
                     b.Property<Guid>("Id")

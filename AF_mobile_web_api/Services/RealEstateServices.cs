@@ -56,9 +56,40 @@ namespace AF_mobile_web_api.Services
 
             _context.WebSearchResults.Add(findings);
             await _context.SaveChangesAsync();
+            SavePropertyDataToDatabase(response.Data);
 
             return response;
         }
+
+        private void SavePropertyDataToDatabase(List<SearchData> data)
+        {
+            List<PropertyData> propertiesList = new List<PropertyData>();
+            foreach (var item in data)
+            {               
+                var property = new PropertyData
+                {
+                    OffertId = item.Id,
+                    Url = item.Url,
+                    Title = item.Title,
+                    CreatedTime = item.CreatedTime,
+                    Private = item.Private,
+                    Price = item.Price,
+                    PricePerMeter = item.PricePerMeter,
+                    Floor = item.Floor,
+                    Market = item.Market,
+                    BuildingType = item.BuildingType,
+                    Area = item.Area,              
+                    City = item.Location.City,
+                    AddedRecordTime = DateTime.UtcNow
+                };
+
+                propertiesList.Add(property);
+            }
+
+            _context.PropertyData.AddRange(propertiesList);
+            _context.SaveChanges();
+        }
+        
         public async Task<MarketplaceSearch> GetMoreResponse()
         {
             MarketplaceSearch searchedData = new MarketplaceSearch();
