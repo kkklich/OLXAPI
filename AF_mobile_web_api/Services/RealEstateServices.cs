@@ -44,23 +44,45 @@ namespace AF_mobile_web_api.Services
 
         public async Task<MarketplaceSearch> GetMoreResponse()
         {
-            MarketplaceSearch searcheddata = new MarketplaceSearch();
+            MarketplaceSearch searchedData = new MarketplaceSearch();
             int limit = 40;
-            for (int j = 0; j < 5; j++)//5
+
+            var allTasks = new List<Task<List<SearchData>>>();
+
+            for (int j = 0; j < 3; j++)//5
             {
-                for (int i = 0; i < 25; i++)//25
+                for (int i = 0; i < 25; i++)
                 {
-                    var response = await GetDefaultResponse(i * limit, limit, (200000 * j) + 50000, (200000 * j) + 250000);                    
-                    var result = ExtractListOfParameters(response.Data);
-                    searcheddata.Data.AddRange(result);
+                    int offset = i * limit;
+                    int minPrice = (200000 * j) + 50000;
+                    int maxPrice = (200000 * j) + 250000;
+
+                    // Launch the task and defer execution
+                    allTasks.Add(Task.Run(async () =>
+                    {
+                        var response = await GetDefaultResponse(offset, limit, minPrice, maxPrice);
+                        return ExtractListOfParameters(response.Data);
+                    }));
                 }
             }
 
-            searcheddata.Data = searcheddata.Data.DistinctBy(x => x.Id).OrderBy(x => x.PricePerMeter).ToList();
-            searcheddata.TotalCount = searcheddata.Data.Count;
+            var results = await Task.WhenAll(allTasks);
 
-            return searcheddata;
+            foreach (var result in results)
+            {
+                searchedData.Data.AddRange(result);
+            }
+
+            searchedData.Data = searchedData.Data
+                .DistinctBy(x => x.Id)
+                .OrderBy(x => x.PricePerMeter)
+                .ToList();
+
+            searchedData.TotalCount = searchedData.Data.Count;
+
+            return searchedData;
         }
+
 
         private List<SearchData> ExtractListOfParameters(List<Data> responses)
         {
