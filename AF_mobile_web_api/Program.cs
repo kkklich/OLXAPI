@@ -1,7 +1,16 @@
+using System;
 using System.Reflection;
 using AF_mobile_web_api.Services;
+using ApplicationDatabase;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseMySql(
+        builder.Configuration.GetConnectionString("ConnectionString"),
+        new MySqlServerVersion(new Version(7, 0, 0)) // adjust version
+    ));
 
 // Add services to the container.
 builder.Services
