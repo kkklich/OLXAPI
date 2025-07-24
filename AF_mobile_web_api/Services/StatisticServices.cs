@@ -11,12 +11,15 @@ namespace AF_mobile_web_api.Services
             _realEstate = realEstate;
         }
 
-        //public async Task<RealEstateStatistics> GetDataWithStatistics() 
-        public async Task<Dictionary<int, RealEstateStatistics>> GetDataWithStatistics() 
+        public async Task<RealEstateStatistics> GetDataWithStatistics()
         {
             var response = await _realEstate.GetMoreResponse();
-
-            //return CalculateStatistics(response.Data);
+            return CalculateStatistics(response.Data);
+        }
+        
+        public async Task<Dictionary<int, RealEstateStatistics>> GetDataWithGroupStatistics()
+        {
+            var response = await _realEstate.GetMoreResponse();
             return CalculateStatisticsGroupBy(response.Data);
         }
 

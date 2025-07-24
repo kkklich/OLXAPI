@@ -14,12 +14,12 @@ namespace AF_mobile_web_api.Controllers
             _statisticServices = statisticServices;
         }
 
-        [HttpGet("defaultRealEstate")]
+        [HttpGet("getRealEstate")]
         public async Task<IActionResult> GetDefaultRealEstate()
         {
             try
             {
-                var result = await _realEstate.GetMoreResponse();
+                var result = await _realEstate.GetDataSave();
                 return Ok(result);
             }
             catch (Exception ex)

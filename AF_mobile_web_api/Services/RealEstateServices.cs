@@ -1,8 +1,8 @@
 ﻿using System.Globalization;
-using System.Text.RegularExpressions;
 using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.Helper;
-using Microsoft.AspNetCore.Mvc;
+using ApplicationDatabase;
+using ApplicationDatabase.Models;
 using Newtonsoft.Json;
 
 
@@ -11,10 +11,12 @@ namespace AF_mobile_web_api.Services
     public class RealEstateServices
     {
         private readonly HTTPClientServices _httpClient;
-       
-        public RealEstateServices(HTTPClientServices httpClient)
+        private readonly AppDbContext _context;
+
+        public RealEstateServices(HTTPClientServices httpClient, AppDbContext context)
         {
             _httpClient = httpClient;
+            _context = context;
         }
 
         public async Task<QueryData> GetDefaultResponse(int offset = 0, int limit = 40, int priceFrom = 50000, int priceTo = 250000)
@@ -42,6 +44,21 @@ namespace AF_mobile_web_api.Services
             return data;
         }
 
+        public async Task<MarketplaceSearch> GetDataSave()
+        {
+            var response = await GetMoreResponse();
+            WebSearchResults findings = new WebSearchResults()
+            {
+                Name = response.TotalCount.ToString(),
+                Content = JsonConvert.SerializeObject(response.Data),
+                CreationDate = DateTime.UtcNow
+            };
+
+            _context.WebSearchResults.Add(findings);
+            await _context.SaveChangesAsync();
+
+            return response;
+        }
         public async Task<MarketplaceSearch> GetMoreResponse()
         {
             MarketplaceSearch searchedData = new MarketplaceSearch();
