@@ -42,5 +42,19 @@ namespace AF_mobile_web_api.Controllers
                 return BadRequest(ex.Message);
             }
         }
+        
+        [HttpGet("RealEstateGropuBy")]
+        public async Task<IActionResult> RealEstateGropuBy([FromQuery] string groupBy)
+        {
+            try
+            {
+                var result = await _statisticServices.GetDataWithGroupStatistics(groupBy);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
     }
 }
