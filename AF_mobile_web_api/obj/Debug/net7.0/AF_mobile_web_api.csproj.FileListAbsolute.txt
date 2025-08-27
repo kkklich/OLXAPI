@@ -180,3 +180,7 @@ D:\Dokumenty\Praca\repos\OLXAPI\AF_mobile_web_api\obj\Debug\net7.0\refint\AF_mob
 D:\Dokumenty\Praca\repos\OLXAPI\AF_mobile_web_api\obj\Debug\net7.0\AF_mobile_web_api.pdb
 D:\Dokumenty\Praca\repos\OLXAPI\AF_mobile_web_api\obj\Debug\net7.0\AF_mobile_web_api.genruntimeconfig.cache
 D:\Dokumenty\Praca\repos\OLXAPI\AF_mobile_web_api\obj\Debug\net7.0\ref\AF_mobile_web_api.dll
+C:\Users\kklic\source\repos\OLXAPI\AF_mobile_web_api\bin\Debug\net7.0\MySqlConnector.dll
+C:\Users\kklic\source\repos\OLXAPI\AF_mobile_web_api\bin\Debug\net7.0\Pomelo.EntityFrameworkCore.MySql.dll
+C:\Users\kklic\source\repos\OLXAPI\AF_mobile_web_api\bin\Debug\net7.0\ApplicationDatabase.dll
+C:\Users\kklic\source\repos\OLXAPI\AF_mobile_web_api\bin\Debug\net7.0\ApplicationDatabase.pdb

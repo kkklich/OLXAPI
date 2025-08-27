@@ -26,15 +26,21 @@
           "net7.0"
         ],
         "sources": {
+          "C:\\LocalNugetRepo": {},
           "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
           "C:\\Program Files\\dotnet\\library-packs": {},
           "https://api.nuget.org/v3/index.json": {},
-          "https://gitlab.demonstrator.eu/api/v4/projects/187/packages/nuget/index.json": {}
+          "https://gitlab.demonstrator.eu/api/v4/projects/187/packages/nuget/index.json": {},
+          "https://gitlab.demonstrator.eu/api/v4/projects/268/packages/nuget/index.json": {}
         },
         "frameworks": {
           "net7.0": {
             "targetAlias": "net7.0",
-            "projectReferences": {}
+            "projectReferences": {
+              "C:\\Users\\kklic\\source\\repos\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj": {
+                "projectPath": "C:\\Users\\kklic\\source\\repos\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj"
+              }
+            }
           }
         },
         "warningProperties": {
@@ -96,6 +102,10 @@
               "target": "Package",
               "version": "[1.1.0, )"
             },
+            "Pomelo.EntityFrameworkCore.MySql": {
+              "target": "Package",
+              "version": "[7.0.0, )"
+            },
             "Swashbuckle.AspNetCore": {
               "target": "Package",
               "version": "[6.5.0, )"
@@ -115,7 +125,7 @@
           "downloadDependencies": [
             {
               "name": "Microsoft.Net.Sdk.Compilers.Toolset",
-              "version": "[9.0.108, 9.0.108]"
+              "version": "[9.0.109, 9.0.109]"
             }
           ],
           "frameworkReferences": {
@@ -126,7 +136,92 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.108\\RuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.109\\RuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "C:\\Users\\kklic\\source\\repos\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\kklic\\source\\repos\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj",
+        "projectName": "ApplicationDatabase",
+        "projectPath": "C:\\Users\\kklic\\source\\repos\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj",
+        "packagesPath": "C:\\Users\\kklic\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\kklic\\source\\repos\\OLXAPI\\ApplicationDatabase\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages",
+          "C:\\Program Files\\dotnet\\sdk\\NuGetFallbackFolder"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\kklic\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net7.0"
+        ],
+        "sources": {
+          "C:\\LocalNugetRepo": {},
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "C:\\Program Files\\dotnet\\library-packs": {},
+          "https://api.nuget.org/v3/index.json": {},
+          "https://gitlab.demonstrator.eu/api/v4/projects/187/packages/nuget/index.json": {},
+          "https://gitlab.demonstrator.eu/api/v4/projects/268/packages/nuget/index.json": {}
+        },
+        "frameworks": {
+          "net7.0": {
+            "targetAlias": "net7.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "all"
+        }
+      },
+      "frameworks": {
+        "net7.0": {
+          "targetAlias": "net7.0",
+          "dependencies": {
+            "Microsoft.EntityFrameworkCore": {
+              "target": "Package",
+              "version": "[7.0.19, )"
+            },
+            "Microsoft.EntityFrameworkCore.Relational": {
+              "target": "Package",
+              "version": "[7.0.19, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.Net.Sdk.Compilers.Toolset",
+              "version": "[9.0.109, 9.0.109]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.109\\RuntimeIdentifierGraph.json"
         }
       }
     }
