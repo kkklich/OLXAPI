@@ -3,6 +3,7 @@ using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.Helper;
 using ApplicationDatabase;
 using ApplicationDatabase.Models;
+using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 
 
@@ -42,10 +43,27 @@ namespace AF_mobile_web_api.Services
             var data = JsonConvert.DeserializeObject<QueryData>(result);
 
             return data;
-        }
+        }      
 
         public async Task<MarketplaceSearch> GetDataSave()
         {
+            // Check if there is an object created less than 5 days ago
+            var recentEntry = await _context.WebSearchResults
+                .Where(w => w.CreationDate >= DateTime.UtcNow.AddDays(-5))
+                .FirstOrDefaultAsync();
+
+            if (recentEntry != null)
+            {
+                var deserializedData = JsonConvert.DeserializeObject<List<SearchData>>(recentEntry.Content);
+                MarketplaceSearch result = new MarketplaceSearch()
+                {
+                    Data = deserializedData ?? new List<SearchData>(),
+                    TotalCount = recentEntry.Name != null ? int.Parse(recentEntry.Name) + 1000000 : 0,                    
+                };
+                return result;
+            }
+
+            // Proceed with fetching and saving data
             var response = await GetMoreResponse();
             WebSearchResults findings = new WebSearchResults()
             {
