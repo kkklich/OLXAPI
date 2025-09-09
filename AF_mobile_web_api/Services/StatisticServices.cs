@@ -17,7 +17,21 @@ namespace AF_mobile_web_api.Services
             var response = await _realEstate.GetMoreResponse();
             return CalculateStatistics(response.Data);
         }
-        
+
+        private RealEstateStatistics CalculateStatistics(List<SearchData> data)
+        {
+            var stats = new RealEstateStatistics
+            {
+                MedianPricePerMeter = CalculateMedianPricePerMeter(data),
+                MedianPrice = CalculateAvaragePrice(data),
+                MedianArea = CalculateMedianArea(data),
+                AverageFloor = data.Average(x => x.Floor),
+                Count = data.Count
+            };
+
+            return stats;
+        }
+
         public async Task<Dictionary<object, RealEstateStatistics>> GetDataWithGroupStatistics(string groupByProperty)
         {
             var response = await _realEstate.GetMoreResponse();
@@ -43,23 +57,11 @@ namespace AF_mobile_web_api.Services
             
             return groupedByData;
 
-        }       
-
-        private RealEstateStatistics DisplayStatistics(List<SearchData> data)
-        {
-            return new RealEstateStatistics
-            {
-                MedianPricePerMeter = CalculateMedianPricePerMeter(data),
-                MedianPrice = CalculateAvaragePrice(data),
-                MedianArea = CalculateMedianArea(data),
-                AverageFloor = data.Average(x => x.Floor),
-                Count = data.Count
-            };
         }
 
         public Dictionary<TKey, RealEstateStatistics> CalculateStatisticsGroupBy<TKey>(
-            List<SearchData> data,
-            Func<SearchData, TKey> keySelector)
+           List<SearchData> data,
+           Func<SearchData, TKey> keySelector)
         {
             return data
                 .GroupBy(keySelector)
@@ -72,9 +74,9 @@ namespace AF_mobile_web_api.Services
                 .ToDictionary(x => x.Key, x => x.Stats);
         }
 
-        private RealEstateStatistics CalculateStatistics(List<SearchData> data)
+        private RealEstateStatistics DisplayStatistics(List<SearchData> data)
         {
-            var stats = new RealEstateStatistics
+            return new RealEstateStatistics
             {
                 MedianPricePerMeter = CalculateMedianPricePerMeter(data),
                 MedianPrice = CalculateAvaragePrice(data),
@@ -82,9 +84,10 @@ namespace AF_mobile_web_api.Services
                 AverageFloor = data.Average(x => x.Floor),
                 Count = data.Count
             };
-
-            return stats;
         }
+             
+
+      
 
         private double CalculateAvaragePrice(List<SearchData> data)
         {
