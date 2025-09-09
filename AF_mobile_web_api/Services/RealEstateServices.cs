@@ -47,9 +47,9 @@ namespace AF_mobile_web_api.Services
 
         public async Task<MarketplaceSearch> GetDataSave()
         {
-            // Check if there is an object created less than 5 days ago
             var recentEntry = await _context.WebSearchResults
                 .Where(w => w.CreationDate >= DateTime.UtcNow.AddDays(-5))
+                .OrderByDescending(w => w.CreationDate)
                 .FirstOrDefaultAsync();
 
             if (recentEntry != null)
@@ -58,7 +58,7 @@ namespace AF_mobile_web_api.Services
                 MarketplaceSearch result = new MarketplaceSearch()
                 {
                     Data = deserializedData ?? new List<SearchData>(),
-                    TotalCount = recentEntry.Name != null ? int.Parse(recentEntry.Name) + 1000000 : 0,                    
+                    TotalCount = recentEntry.Name != null ? int.Parse(recentEntry.Name) + 1000000 : 0,
                 };
                 return result;
             }
@@ -123,7 +123,7 @@ namespace AF_mobile_web_api.Services
                     int minPrice = (200000 * j) + 50000;
                     int maxPrice = (200000 * j) + 250000;
 
-                    // Launch the task and defer execution
+                    // Launch the task
                     allTasks.Add(Task.Run(async () =>
                     {
                         var response = await GetDefaultResponse(offset, limit, minPrice, maxPrice);
@@ -155,6 +155,8 @@ namespace AF_mobile_web_api.Services
             List<SearchData> result = new List<SearchData>();
             foreach (var response in responses)
             {
+                if(response.Title.Contains("TBS"))
+                    continue;
                 var extractedObject = ExtractParameter(response);
                 result.Add(extractedObject);
             }
@@ -171,7 +173,7 @@ namespace AF_mobile_web_api.Services
             record.Title = data.Title;
             record.CreatedTime = data.created_time;
             record.Private = !data.Business;
-            //record.Description = data.Description;
+            record.Description = data.Description;
             record.Location = new LocationPlace() 
             {
                 City = data?.Location?.City?.Name ?? string.Empty,
@@ -202,13 +204,12 @@ namespace AF_mobile_web_api.Services
                 {
                     case ConstantHelper.Price:
                         if (param.Value?.Label != null)
-                            data.Price = ParsePriceToDouble(param.Value?.Label);
+                            data.Price = ParseNumberToDouble(param.Value?.Label);
                         break;
-                    case ConstantHelper.PricePerMeter:
-                        if (double.TryParse(param.Value?.Key, NumberStyles.Any, CultureInfo.InvariantCulture, out var pricePerM))
-                            data.PricePerMeter = pricePerM;
-
-                        if (pricePerM == 0)
+                    case ConstantHelper.PricePerMeter:                      
+                        data.PricePerMeter = ParseNumberToDouble(param?.Value?.Key ?? string.Empty);
+                         
+                        if (data.PricePerMeter == 0)
                             data.PricePerMeter = data.Price / data.Area;
                         break;
                     case ConstantHelper.FloorSelect:
@@ -218,17 +219,11 @@ namespace AF_mobile_web_api.Services
                     case ConstantHelper.Market:
                         data.Market = param.Value?.Label ?? string.Empty;
                         break;
-
                     case ConstantHelper.BuildType:
                         data.BuildingType = param.Value?.Label;
                         break;
-
                     case ConstantHelper.Area:
-                        if (double.TryParse(param.Value?.Key, System.Globalization.NumberStyles.Any,
-                            System.Globalization.CultureInfo.InvariantCulture, out var area))
-                        {
-                            data.Area = area;
-                        }
+                        data.Area = ParseNumberToDouble(param?.Value?.Key ?? string.Empty);
                         break;
                 }
             }
@@ -237,17 +232,17 @@ namespace AF_mobile_web_api.Services
         }
 
 
-        private double ParsePriceToDouble(string priceString)
+        private double ParseNumberToDouble(string priceString)
         {
             if (string.IsNullOrWhiteSpace(priceString))
                 return 0;
 
             var cleaned = priceString.Replace("zł", "", StringComparison.OrdinalIgnoreCase)
                                      .Replace(" ", "")
+                                     .Replace(",", ".", StringComparison.OrdinalIgnoreCase)
                                      .Trim();
 
-            if (double.TryParse(cleaned, System.Globalization.NumberStyles.Any,
-                System.Globalization.CultureInfo.InvariantCulture, out double result))
+            if (double.TryParse(cleaned, System.Globalization.NumberStyles.Any,System.Globalization.CultureInfo.InvariantCulture, out double result))
             {
                 return result;
             }
