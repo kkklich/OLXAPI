@@ -6,6 +6,25 @@
 AF_mobile_web_api/bin/
 AF_mobile_web_api/obj/
 
+
+AF_mobile_web_api/bin/Debug/net7.0/AF_mobile_web_api.dll
+AF_mobile_web_api/bin/Debug/net7.0/AF_mobile_web_api.exe
+AF_mobile_web_api/bin/Debug/net7.0/AF_mobile_web_api.pdb
+AF_mobile_web_api/obj/AF_mobile_web_api.csproj.nuget.dgspec.json
+AF_mobile_web_api/obj/Debug/net7.0/AF_mobile_web_api.AssemblyInfo.cs
+AF_mobile_web_api/obj/Debug/net7.0/AF_mobile_web_api.AssemblyInfoInputs.cache
+AF_mobile_web_api/obj/Debug/net7.0/AF_mobile_web_api.csproj.AssemblyReference.cache
+AF_mobile_web_api/obj/Debug/net7.0/AF_mobile_web_api.dll
+AF_mobile_web_api/obj/Debug/net7.0/AF_mobile_web_api.pdb
+AF_mobile_web_api/obj/Debug/net7.0/AF_mobile_web_api.sourcelink.json
+AF_mobile_web_api/obj/Debug/net7.0/ApiEndpoints.json
+AF_mobile_web_api/obj/Debug/net7.0/apphost.exe
+AF_mobile_web_api/obj/Debug/net7.0/ref/AF_mobile_web_api.dll
+AF_mobile_web_api/obj/Debug/net7.0/refint/AF_mobile_web_api.dll
+AF_mobile_web_api/obj/project.assets.json
+AF_mobile_web_api/obj/project.nuget.cache
+
+
 # User-specific files
 *.rsuser
 *.suo
