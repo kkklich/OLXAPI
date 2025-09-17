@@ -3,7 +3,8 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
-*AF_mobile_web_api/bin/
+AF_mobile_web_api/bin/
+AF_mobile_web_api/obj/
 
 # User-specific files
 *.rsuser
