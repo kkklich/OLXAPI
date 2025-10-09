@@ -73,6 +73,9 @@ namespace ApplicationDatabase.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<int>("WebName")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
                     b.ToTable("PropertyData");
