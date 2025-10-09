@@ -20,7 +20,9 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services
     .AddScoped<HTTPClientServices>()
     .AddScoped<RealEstateServices>()
-    .AddScoped<StatisticServices>();
+    .AddScoped<StatisticServices>()
+    .AddScoped<MorizonApiService>()
+    .AddScoped<OLXAPIService>();
 
 builder.Services.AddControllers();  
 
