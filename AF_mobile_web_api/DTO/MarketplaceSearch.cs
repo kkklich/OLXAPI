@@ -20,11 +20,13 @@
         public double Price { get; set; }
         public double PricePerMeter { get; set; }
         public int Floor { get; set; }
+        //public int MaxFloor { get; set; } //TODO
         public string Market{ get; set; }
         public string BuildingType { get; set; }
         public double Area { get; set; }
         public string Description { get; set; }
         public bool Private { get; set; }
+        public WebName WebName { get; set; }
         public LocationPlace Location { get; set; }
         public List<Photos> Photos { get; set; }
 
@@ -40,6 +42,8 @@
         public double Lon { get; set; }
         public string City { get; set; }
         public string District { get; set; }
+        public string Street { get; set; }
+        public string Number { get; set; }
     }
 
     public class Photos
@@ -49,5 +53,11 @@
         public int Width { get; set; }
         public int Height { get; set; }
         public string Link { get; set; }
+    }
+
+    public enum WebName
+    {
+        OLX,
+        Morizon
     }
 }
