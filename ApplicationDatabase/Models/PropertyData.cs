@@ -23,5 +23,6 @@ namespace ApplicationDatabase.Models
         public bool Private { get; set; }
         public string City { get; set; }
         public DateTime AddedRecordTime { get; set; }
+        public int WebName { get; set; }
     }
 }

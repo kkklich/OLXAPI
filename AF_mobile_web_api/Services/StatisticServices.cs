@@ -14,7 +14,7 @@ namespace AF_mobile_web_api.Services
 
         public async Task<RealEstateStatistics> GetDataWithStatistics()
         {
-            var response = await _realEstate.GetMoreResponse();
+            var response = await _realEstate.GetDataSave();
             return CalculateStatistics(response.Data);
         }
 
@@ -34,7 +34,7 @@ namespace AF_mobile_web_api.Services
 
         public async Task<Dictionary<object, RealEstateStatistics>> GetDataWithGroupStatistics(string groupByProperty)
         {
-            var response = await _realEstate.GetMoreResponse();
+            var response = await _realEstate.GetDataSave();
 
             var propertyParts = groupByProperty.Split('.');
             var type = typeof(SearchData);

@@ -8,12 +8,28 @@ namespace AF_mobile_web_api.Controllers
     {
         private readonly RealEstateServices _realEstate;
         private readonly StatisticServices _statisticServices;
-        public RealEstateController(RealEstateServices realEstate, StatisticServices statisticServices)
+        private readonly MorizonApiService _morizonApiService;
+        public RealEstateController(RealEstateServices realEstate, StatisticServices statisticServices, MorizonApiService morizonApiService)
         {
             _realEstate = realEstate;
             _statisticServices = statisticServices;
+            _morizonApiService = morizonApiService;
         }
 
+        [HttpGet("getMorizonAPI")]
+        public async Task<IActionResult> getMorizonAPI()
+        {
+            try
+            {
+                var result = await _morizonApiService.GetPropertyListingDataAsync();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        
         [HttpGet("getRealEstate")]
         public async Task<IActionResult> GetDefaultRealEstate()
         {
