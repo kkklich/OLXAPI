@@ -13,7 +13,7 @@
 
     public class SearchData
     {
-        public long Id { get; set; } //  internal id  //todo change to string DB
+        public string Id { get; set; } //  internal id  //todo change to string DB
         public string Url { get; set; } //url of the offer
         public string Title { get; set; } //title of the offer
         public DateTime CreatedTime { get; set; } //date of creation

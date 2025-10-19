@@ -149,7 +149,7 @@ namespace AF_mobile_web_api.Services
             var buildingType = b.Rccata?.ToLower().Contains("flats") == true ? "Mieszkania" : b.Rccata ?? "";
             var sd = new SearchData
             {
-                Id = internalId, //TODO chanege to string
+                Id = a.Id,
                 WebName = WebName.NieruchomsciOnline,
                 Url = a.ShareUrl ?? "",
                 Title = a.MetaTitle ?? "",
