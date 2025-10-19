@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using AF_mobile_web_api.Helper;
+using Microsoft.OpenApi.Services;
 
 namespace AF_mobile_web_api.Services
 {
@@ -105,7 +106,7 @@ namespace AF_mobile_web_api.Services
                     }
 
                     // Add delay between batches to respect rate limits
-                    await Task.Delay(2); // 2 ms delay between batches
+                    //await Task.Delay(2); // 2 ms delay between batches
                 }
 
                 // Remove duplicates based on property ID

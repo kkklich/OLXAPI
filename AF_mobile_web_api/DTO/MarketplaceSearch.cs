@@ -13,22 +13,21 @@
 
     public class SearchData
     {
-        public long Id { get; set; }
-        public string Url { get; set; }
-        public string Title { get; set; }
-        public DateTime CreatedTime { get; set; }
-        public double Price { get; set; }
-        public double PricePerMeter { get; set; }
-        public int Floor { get; set; }
-        //public int MaxFloor { get; set; } //TODO
-        public string Market{ get; set; }
-        public string BuildingType { get; set; }
-        public double Area { get; set; }
-        public string Description { get; set; }
-        public bool Private { get; set; }
-        public WebName WebName { get; set; }
-        public LocationPlace Location { get; set; }
-        public List<Photos> Photos { get; set; }
+        public long Id { get; set; } //  internal id  //todo change to string DB
+        public string Url { get; set; } //url of the offer
+        public string Title { get; set; } //title of the offer
+        public DateTime CreatedTime { get; set; } //date of creation
+        public double Price { get; set; } // total price
+        public double PricePerMeter { get; set; } // price per m2
+        public int Floor { get; set; }// number of floor
+        public string Market{ get; set; } // primary = Pierwotny, Wtorny
+        public string BuildingType { get; set; } //Blok, Apartamentowiec, Kamienica 
+        public double Area { get; set; } //area in m2
+        public string Description { get; set; } //description
+        public bool Private { get; set; } //private = true, agency = false
+        public WebName WebName { get; set; }  //OLX, Morizon, NieruchomsciOnline
+        public LocationPlace Location { get; set; } //location details
+        public List<Photos> Photos { get; set; }//list of photos
 
         public SearchData()
         {
@@ -58,6 +57,7 @@
     public enum WebName
     {
         OLX,
-        Morizon
+        Morizon,
+        NieruchomsciOnline
     }
 }

@@ -1,9 +1,9 @@
 ﻿using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.Helper;
 using ApplicationDatabase.Models;
+using Azure;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
-using System.Net.Http;
 
 namespace AF_mobile_web_api.Services
 {
@@ -15,36 +15,112 @@ namespace AF_mobile_web_api.Services
             _httpClient = httpClient;
         }
 
-        public async Task<MarketplaceSearch> GetMoreResponse()
+        public  async Task<List<SearchData>> GetAllOffersAsync(
+       int categoryId,
+       int? regionId,
+       int? cityId,
+       int priceFrom,
+       int priceTo
+       )
+        {
+            int priceBucket = 50000;
+            int offsetStart = 0;
+
+            var buckets = new List<(int from, int to)>();
+            for (int from = priceFrom; from <= priceTo; from += priceBucket)
+            {
+                int to = Math.Min(from + priceBucket - 1, priceTo);
+                buckets.Add((from, to)); // one bucket per task [web:26]
+            }
+
+            var tasks = new List<Task<List<SearchData>>>(buckets.Count);
+            foreach (var b in buckets)
+            {
+                tasks.Add(FetchRangeAllPagesAsync(
+                    categoryId, regionId, cityId, b.from, b.to, offsetStart)); // one task per bucket 
+            }
+
+            var results = await Task.WhenAll(tasks).ConfigureAwait(false); // run all and wait 
+            var all = new List<SearchData>();
+            foreach (var chunk in results)
+                all.AddRange(chunk); // flatten
+            return all; // merged list
+        }
+
+        // Fetch all pages for a single price range using offset/limit
+        private  async Task<List<SearchData>> FetchRangeAllPagesAsync(            
+            int categoryId,
+            int? regionId,
+            int? cityId,
+            int priceFrom,
+            int priceTo,
+            int offsetStart
+         )
+        {
+            var results = new List<SearchData>();
+            var offset = offsetStart;
+            const int limit = 40; //olx API limit 40
+
+            // Do-while style loop to ensure at least one request and then continue while page returns items
+            while (true)
+            {
+                var url = BuildOffersUrl(categoryId, regionId, cityId, priceFrom, priceTo, offset, limit);
+
+                var rawResponse = await _httpClient.GetRaw(url);
+                var result = await rawResponse.Content.ReadAsStringAsync();
+                var data = JsonConvert.DeserializeObject<QueryData>(result);
+
+                var convertedData = ExtractListOfParameters(data.Data);               
+                
+                results.AddRange(convertedData);
+                if (convertedData.Count < limit - 2) break;
+
+                offset += limit; 
+            }
+
+            return results; // all pages for range
+        }
+
+        private  string BuildOffersUrl(
+            int categoryId,
+            int? regionId,
+            int? cityId,
+            int priceFrom,
+            int priceTo,
+            int offset,
+            int limit)
+        {
+            // OLX query uses URL-encoded keys for price filters: filter_float_price:from / :to, commonly seen percent-encoded [web:12]
+            // Keys are encoded as filter_float_price%3Afrom and filter_float_price%3Ato on the wire [web:12]
+            var qp = new List<string>
+        {
+            $"offset={offset}",
+            $"limit={limit}",
+            $"category_id={categoryId}",
+            $"filter_float_price%3Afrom={priceFrom}",
+            $"filter_float_price%3Ato={priceTo}"
+        }; // base params [web:12]
+
+            if (regionId.HasValue) qp.Add($"region_id={regionId.Value}"); // location filter [web:12]
+            if (cityId.HasValue) qp.Add($"city_id={cityId.Value}"); // location filter [web:12]
+
+            var query = string.Join("&", qp); // compose query string [web:12]
+            return $"{ConstantHelper.OLXAPI}?{query}"; // final URL
+        }
+
+        public async Task<MarketplaceSearch> GetOLXResponse()
         {
             MarketplaceSearch searchedData = new MarketplaceSearch();
-            int limit = 40;
 
-            var allTasks = new List<Task<List<SearchData>>>();
-
-            for (int j = 0; j < 3; j++)//5
-            {
-                for (int i = 0; i < 25; i++)
-                {
-                    int offset = i * limit;
-                    int minPrice = (200000 * j) + 50000;
-                    int maxPrice = (200000 * j) + 250000;
-
-                    // Launch the task
-                    allTasks.Add(Task.Run(async () =>
-                    {
-                        var response = await GetDefaultResponse(offset, limit, minPrice, maxPrice);
-                        return ExtractListOfParameters(response.Data);
-                    }));
-                }
-            }
-
-            var results = await Task.WhenAll(allTasks);
-
-            foreach (var result in results)
-            {
-                searchedData.Data.AddRange(result);
-            }
+            var results = await GetAllOffersAsync(
+                categoryId: ConstantHelper.RealEstateCategory, 
+                regionId: ConstantHelper.LesserPolandRegionId,
+                cityId: ConstantHelper.KrakowCityId,
+                priceFrom: 50_000,
+                priceTo: 850_000              
+            );
+            
+            searchedData.Data.AddRange(results);            
 
             searchedData.Data = searchedData.Data
                 .DistinctBy(x => x.Id)
@@ -54,32 +130,8 @@ namespace AF_mobile_web_api.Services
             searchedData.TotalCount = searchedData.Data.Count;
 
             return searchedData;
-        }
 
-        private async Task<QueryData> GetDefaultResponse(int offset = 0, int limit = 40, int priceFrom = 50000, int priceTo = 250000)
-        {
-            int categoryId = ConstantHelper.RealEstateCategory;
-            int regionId = ConstantHelper.LesserPolandRegionId;
-            int cityId = ConstantHelper.KrakowCityId;
-
-            var realEstateQuery = ConstantHelper.OLXAPI;
-
-            var queryParams = $"?offset={offset}" +
-                $"&limit={limit}" +
-                $"&category_id={categoryId}" +
-                $"&region_id={regionId}" +
-                $"&city_id={cityId}" +
-                $"&filter_float_price%3Afrom={priceFrom}" +
-                $"&filter_float_price%3Ato={priceTo}";
-
-            realEstateQuery += queryParams;
-
-            var rawResponse = await _httpClient.GetRaw(realEstateQuery);
-            var result = await rawResponse.Content.ReadAsStringAsync();
-            var data = JsonConvert.DeserializeObject<QueryData>(result);
-
-            return data;
-        }      
+        }          
 
         private List<SearchData> ExtractListOfParameters(List<Data> responses)
         {
@@ -123,7 +175,6 @@ namespace AF_mobile_web_api.Services
             //    Link = p.Link
             //}));
 
-
             return record;
         }
 
@@ -162,7 +213,6 @@ namespace AF_mobile_web_api.Services
 
             return data;
         }
-
 
         private double ParseNumberToDouble(string priceString)
         {

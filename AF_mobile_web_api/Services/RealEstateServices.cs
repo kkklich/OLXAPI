@@ -44,12 +44,11 @@ namespace AF_mobile_web_api.Services
 
             // Proceed with fetching and saving data
             var responseMorizon = await _morizonApiService.GetPropertyListingDataAsync();
-            var responseOLX = await _olxApiService.GetMoreResponse();
-           
+            var responseOLX = await _olxApiService.GetOLXResponse();          
 
 
             MarketplaceSearch combinedData = new MarketplaceSearch();
-            combinedData.Data = responseOLX.Data.Union(responseMorizon.Data).ToList();  
+            combinedData.Data = responseOLX.Data.Union(responseMorizon.Data).ToList();
             combinedData.TotalCount = responseOLX.TotalCount + responseMorizon.TotalCount;
 
             var combinedResponse = new MarketplaceSearch
