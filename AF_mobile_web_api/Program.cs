@@ -22,7 +22,8 @@ builder.Services
     .AddScoped<RealEstateServices>()
     .AddScoped<StatisticServices>()
     .AddScoped<MorizonApiService>()
-    .AddScoped<OLXAPIService>();
+    .AddScoped<OLXAPIService>()
+    .AddScoped<NieruchomosciOnlineService>();    
 
 builder.Services.AddControllers();  
 

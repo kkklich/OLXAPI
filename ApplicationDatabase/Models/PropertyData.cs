@@ -9,7 +9,7 @@ namespace ApplicationDatabase.Models
     public class PropertyData
     {
         public Guid Id { get; set; }
-        public long OffertId { get; set; }
+        public string OffertId { get; set; }
         public string Url { get; set; }
         public string Title { get; set; }
         public DateTime CreatedTime { get; set; }
