@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AF_mobile_web_api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8f0af026510ca723742073de5aedf839ba50cfd9")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e1ed38f8c60ab9aec05ec3b659930aa8f120f0d1")]
 [assembly: System.Reflection.AssemblyProductAttribute("AF_mobile_web_api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AF_mobile_web_api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

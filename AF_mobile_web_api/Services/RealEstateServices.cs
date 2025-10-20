@@ -15,13 +15,15 @@ namespace AF_mobile_web_api.Services
         private readonly AppDbContext _dbContext;
         private readonly OLXAPIService _olxApiService;
         private readonly MorizonApiService _morizonApiService;
-
-        public RealEstateServices(HTTPClientServices httpClient, AppDbContext dbContext, OLXAPIService olxApiService, MorizonApiService morizonApiService)
+        private readonly NieruchomosciOnlineService _nieruchomosciOnlineService;
+            
+        public RealEstateServices(HTTPClientServices httpClient, AppDbContext dbContext, OLXAPIService olxApiService, MorizonApiService morizonApiService, NieruchomosciOnlineService nieruchomosciOnlineService)
         {
             _httpClient = httpClient;
             _dbContext = dbContext;
             _olxApiService = olxApiService;
             _morizonApiService = morizonApiService;
+            _nieruchomosciOnlineService = nieruchomosciOnlineService;
         }        
 
         public async Task<MarketplaceSearch> GetDataSave()
@@ -43,13 +45,16 @@ namespace AF_mobile_web_api.Services
             }
 
             // Proceed with fetching and saving data
+            var responseNieruchomosci = await _nieruchomosciOnlineService.GetAllPagesAsync();
             var responseMorizon = await _morizonApiService.GetPropertyListingDataAsync();
             var responseOLX = await _olxApiService.GetOLXResponse();          
 
 
             MarketplaceSearch combinedData = new MarketplaceSearch();
             combinedData.Data = responseOLX.Data.Union(responseMorizon.Data).ToList();
-            combinedData.TotalCount = responseOLX.TotalCount + responseMorizon.TotalCount;
+            combinedData.Data = combinedData.Data.Union(responseNieruchomosci.Data).ToList();
+
+            combinedData.TotalCount = responseOLX.TotalCount + responseMorizon.TotalCount + responseNieruchomosci.TotalCount;
 
             var combinedResponse = new MarketplaceSearch
             {
@@ -59,7 +64,7 @@ namespace AF_mobile_web_api.Services
 
             WebSearchResults findings = new WebSearchResults()
             {
-                Name = responseOLX.TotalCount.ToString(),
+                Name = combinedData.TotalCount.ToString(),
                 Content = JsonConvert.SerializeObject(combinedResponse.Data),
                 CreationDate = DateTime.UtcNow
             };
@@ -69,7 +74,6 @@ namespace AF_mobile_web_api.Services
             SavePropertyDataToDatabase(combinedData.Data);
 
             return combinedData;
-            //return responseOLX;
         }
 
         private void SavePropertyDataToDatabase(List<SearchData> data)

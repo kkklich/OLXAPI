@@ -23,7 +23,7 @@ namespace AF_mobile_web_api.Controllers
         {
             try
             {
-                var result = await _nieruchomosciOnlineService.GetApartmentListingsAsync();
+                var result = await _nieruchomosciOnlineService.GetAllPagesAsync();
                 return Ok(result);
             }
             catch (Exception ex)
