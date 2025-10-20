@@ -36,7 +36,7 @@ namespace AF_mobile_web_api.Services
             }
         }
 
-        public async Task<HttpResponseMessage> GetRaw(string url, bool withToken = true, double? timeoutInSeconds = null)
+        public async Task<HttpResponseMessage> GetRaw(string url, double? timeoutInSeconds = null, IDictionary<string, string>? headers = null)
         {
             try
             {
@@ -46,6 +46,16 @@ namespace AF_mobile_web_api.Services
                     RequestUri = new Uri(url),
                     Method = HttpMethod.Get
                 };
+
+
+                if (headers is { Count: > 0 })
+                {
+                    foreach (var kv in headers)
+                    {                      
+                        request.Headers.Remove(kv.Key);
+                        request.Headers.TryAddWithoutValidation(kv.Key, kv.Value);                        
+                    }
+                }
 
                 var resp = await client.SendAsync(request);
                 if (!resp.IsSuccessStatusCode)

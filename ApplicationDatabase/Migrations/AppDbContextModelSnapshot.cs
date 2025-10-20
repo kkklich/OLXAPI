@@ -53,8 +53,9 @@ namespace ApplicationDatabase.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
-                    b.Property<long>("OffertId")
-                        .HasColumnType("bigint");
+                    b.Property<string>("OffertId")
+                        .IsRequired()
+                        .HasColumnType("longtext");
 
                     b.Property<double>("Price")
                         .HasColumnType("double");

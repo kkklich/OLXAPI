@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using AF_mobile_web_api.Helper;
+using Microsoft.OpenApi.Services;
 
 namespace AF_mobile_web_api.Services
 {
@@ -105,7 +106,7 @@ namespace AF_mobile_web_api.Services
                     }
 
                     // Add delay between batches to respect rate limits
-                    await Task.Delay(2); // 2 ms delay between batches
+                    //await Task.Delay(2); // 2 ms delay between batches
                 }
 
                 // Remove duplicates based on property ID
@@ -190,7 +191,7 @@ namespace AF_mobile_web_api.Services
                 var searchData = new SearchData();
 
                 // Basic properties
-                searchData.Id = property["id"]?.Value<long>() ?? property["idOnFrontend"]?.Value<long>() ?? 0;
+                searchData.Id = property["id"]?.Value<string>() ?? property["idOnFrontend"]?.Value<string>() ?? "0";
                 searchData.Url = property["url"]?.Value<string>();
                 searchData.Title = property["title"]?.Value<string>() ?? property["advertisementText"]?.Value<string>();
 
@@ -309,11 +310,12 @@ namespace AF_mobile_web_api.Services
             return location;
         }
 
-        private List<Photos> ExtractPhotosData(JToken property, long propertyId)
+        private List<Photos> ExtractPhotosData(JToken property, string propertyId)
         {
             var photos = new List<Photos>();
 
             var photosElement = property["photos"];
+            var longId = long.Parse(propertyId);
             if (photosElement != null && photosElement.Type == JTokenType.Array)
             {
                 foreach (var photo in photosElement)
@@ -344,7 +346,7 @@ namespace AF_mobile_web_api.Services
                     }
 
                     // Construct photo URL
-                    photoObj.Link = ConstructPhotoUrl(photoObj.Filename, photoObj.Id, propertyId);
+                    photoObj.Link = ConstructPhotoUrl(photoObj.Filename, photoObj.Id, longId);
 
                     photos.Add(photoObj);
                 }
@@ -356,14 +358,14 @@ namespace AF_mobile_web_api.Services
                 {
                     // If no photos array but photosNumber exists, create placeholder photos
                     for (int i = 1; i <= photosNumber; i++)
-                    {
+                    {                      
                         photos.Add(new Photos
                         {
-                            Id = propertyId * 1000 + i,
+                            Id = longId * 1000 + i,
                             Filename = $"property_{propertyId}_{i}.jpg",
                             Width = 800,
                             Height = 600,
-                            Link = ConstructPhotoUrl($"property_{propertyId}_{i}.jpg", propertyId * 1000 + i, propertyId)
+                            Link = ConstructPhotoUrl($"property_{propertyId}_{i}.jpg", longId * 1000 + i, longId)
                         });
                     }
                 }
