@@ -1,5 +1,6 @@
 ﻿using AF_mobile_web_api.DTO;
 using Newtonsoft.Json.Linq;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -15,10 +16,70 @@ namespace AF_mobile_web_api.Services
             _httpClient = httpClient;
         }
 
-        public async Task<MarketplaceSearch> GetApartmentListingsAsync()
+        public async Task<MarketplaceSearch> GetAllPagesAsync()
         {
-            string url = "https://www.nieruchomosci-online.pl/szukaj.html?3,mieszkanie,sprzedaz,,Krak%C3%B3w,,,,-565000&ajax=1";
+            int minPriceStart = 150000;
+            int maxPriceEnd = 1000000;
+            int step = 3000;
+            string BaseUrlTemplate = "https://krakow.nieruchomosci-online.pl/szukaj.html?3,mieszkanie,sprzedaz,,Krak%C3%B3w,,,,{0}-{1}&ajax=1";
 
+            var allResults = new ConcurrentBag<SearchData>();
+            var priceRanges = Enumerable.Range(0, (maxPriceEnd - minPriceStart) / step)
+                .Select(i => (Min: minPriceStart + i * step, Max: Math.Min(minPriceStart + (i + 1) * step, maxPriceEnd)))
+                .ToList();
+
+            // Runs in parallel with a concurrency limit (e.g., 10 tasks at a time)
+            await Parallel.ForEachAsync(priceRanges, new ParallelOptions { MaxDegreeOfParallelism = 10 }, async (range, ct) =>
+            {
+                string url = string.Format(BaseUrlTemplate, range.Min, range.Max);
+                var listings = await GetApartmentListingsAsync(url);
+
+                foreach (var item in listings)
+                    allResults.Add(item);
+            });
+
+            var uniqueItems = allResults
+                .GroupBy(x => x.Id)
+                .Select(g => g.First())
+                .ToList();
+
+            MarketplaceSearch searchedData = new MarketplaceSearch()
+            {
+                Data = uniqueItems,
+                TotalCount = uniqueItems.Count
+            };
+
+            return searchedData;
+        }
+
+
+        public async Task<MarketplaceSearch> GetAllPagesAsync2()
+        {
+            var results = new List<SearchData>();
+            int maxPages = 200;
+            string baseUrl = "https://krakow.nieruchomosci-online.pl/mieszkania,sprzedaz/?p=";
+
+            for (int page = 1; page <= maxPages; page++)
+            {
+                string url = $"{baseUrl}{page}";
+                var response = await GetApartmentListingsAsync(url);             
+                results.AddRange(response);
+
+                await Task.Delay(1);
+            }
+
+            MarketplaceSearch searchedData = new MarketplaceSearch()
+            {
+                Data = results,
+                TotalCount = results.Count
+            };
+            
+            return searchedData;
+        }
+
+
+        public async Task<List<SearchData>> GetApartmentListingsAsync(string url)
+        {
             var headers = new Dictionary<string, string>
             {
                 ["X-Requested-With"] = "XMLHttpRequest"
@@ -41,7 +102,6 @@ namespace AF_mobile_web_api.Services
             }
             catch (HttpRequestException e)
             {
-                Console.WriteLine($"Request Error: {e.Message}");
                 return null; // Or handle the error appropriately
             }
         }
@@ -126,19 +186,18 @@ namespace AF_mobile_web_api.Services
             return result;
         }
 
-        private MarketplaceSearch Convert(List<AdditionalData> items, List<RecordProps> recordProps)
+        private List<SearchData> Convert(List<AdditionalData> items, List<RecordProps> recordProps)
         {
-            var result = new MarketplaceSearch();
+            var result = new List<SearchData>();
 
             long runningId = 1;
             foreach (var a in items)
             {
                 var b = recordProps.FirstOrDefault(x => x.Id == a.Id);
                 var sd = MapOne(a, b, runningId++);
-                result.Data.Add(sd);
+                result.Add(sd);
             }
 
-            result.TotalCount = result.Data.Count;
             return result;
         }
 
@@ -146,7 +205,7 @@ namespace AF_mobile_web_api.Services
         {
             var area = b?.Rsur ?? 1.0D;
             var price = ParseDouble(a.PrimaryPrice);
-            var buildingType = b.Rccata?.ToLower().Contains("flats") == true ? "Mieszkania" : b.Rccata ?? "";
+            var buildingType = b.Rccata?.ToLower().Contains("flats") == true ? "Blok" : b.Rccata ?? "";
             var sd = new SearchData
             {
                 Id = a.Id,
@@ -158,7 +217,7 @@ namespace AF_mobile_web_api.Services
                 Market = a.Market switch
                 {
                     "primary" => "pierwotny",
-                    "secondary" => "wtorny",    
+                    "secondary" => "wtórny",    
                     _ => a.Market ?? "pierwotny"
                 },
                 Private = !b.Pbh.ToLower().Contains("agency") && !b.Pbh.ToLower().Contains("dev"),
