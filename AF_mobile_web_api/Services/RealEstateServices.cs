@@ -28,8 +28,11 @@ namespace AF_mobile_web_api.Services
 
         public async Task<MarketplaceSearch> GetDataSave()
         {
+            var dateWeekAgo = DateTime.UtcNow.AddDays(-7);
+            dateWeekAgo = new DateTime(dateWeekAgo.Year, dateWeekAgo.Month, dateWeekAgo.Day, 20, 0, 0, dateWeekAgo.Kind);
+
             var recentEntry = await _dbContext.WebSearchResults
-                .Where(w => w.CreationDate >= DateTime.UtcNow.AddDays(-5))
+                .Where(w => w.CreationDate >= dateWeekAgo)
                 .OrderByDescending(w => w.CreationDate)
                 .FirstOrDefaultAsync();
 
