@@ -216,9 +216,9 @@ namespace AF_mobile_web_api.Services
                 Price = price,
                 Market = a.Market switch
                 {
-                    "primary" => "pierwotny",
-                    "secondary" => "wtórny",    
-                    _ => a.Market ?? "pierwotny"
+                    "primary" => "Pierwotny",
+                    "secondary" => "Wtórny",    
+                    _ => a.Market ?? "Pierwotny"
                 },
                 Private = !b.Pbh.ToLower().Contains("agency") && !b.Pbh.ToLower().Contains("dev"),
                 Area = area, 
