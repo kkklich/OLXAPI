@@ -1,0 +1,17 @@
+name: Weekly API Call
+
+on:
+  schedule:
+    # Every Sunday at 23:00 UTC (adjust if needed)
+    - cron: '0 23 * * 4'
+  workflow_dispatch: # lets you run manually if you want
+
+jobs:
+  call-api:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Call Render API endpoint
+        run: |
+          echo "Calling API..."
+          curl -X GET https://olxapi-jwcz.onrender.com/api/RealEstate/loadDataMarkeplaces
