@@ -28,6 +28,25 @@ namespace AF_mobile_web_api.Services
 
         public async Task<MarketplaceSearch> GetDataSave()
         {
+            var recentEntry = await _dbContext.WebSearchResults
+                .OrderByDescending(w => w.CreationDate)
+                .FirstOrDefaultAsync();
+
+            if (recentEntry != null)
+            {
+                var deserializedData = JsonConvert.DeserializeObject<List<SearchData>>(recentEntry.Content);
+                MarketplaceSearch result = new MarketplaceSearch()
+                {
+                    Data = deserializedData ?? new List<SearchData>(),
+                    TotalCount = recentEntry.Name != null ? int.Parse(recentEntry.Name) : 0,
+                };
+                return result;
+            }
+            return new MarketplaceSearch();
+        }
+        
+        public async Task<MarketplaceSearch> LoadDataMarkeplaces(String? city = null)
+        {
             var dateWeekAgo = DateTime.UtcNow.AddDays(-7);
             dateWeekAgo = new DateTime(dateWeekAgo.Year, dateWeekAgo.Month, dateWeekAgo.Day, 20, 0, 0, dateWeekAgo.Kind);
 
@@ -69,7 +88,8 @@ namespace AF_mobile_web_api.Services
             {
                 Name = combinedData.TotalCount.ToString(),
                 Content = JsonConvert.SerializeObject(combinedResponse.Data),
-                CreationDate = DateTime.UtcNow
+                CreationDate = DateTime.UtcNow,
+                City = city ?? combinedData.Data.FirstOrDefault()?.Location.City ?? "Unknown"
             };
 
             _dbContext.WebSearchResults.Add(findings);
