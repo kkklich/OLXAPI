@@ -45,6 +45,20 @@ namespace AF_mobile_web_api.Controllers
                 return BadRequest(ex.Message);
             }
         }
+
+        [HttpGet("loadDataMarkeplaces")]
+        public async Task<IActionResult> LoadDataMarkeplaces()
+        {
+            try
+            {
+                var result = await _realEstate.LoadDataMarkeplaces();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
         
         [HttpGet("getRealEstate")]
         public async Task<IActionResult> GetDefaultRealEstate()
