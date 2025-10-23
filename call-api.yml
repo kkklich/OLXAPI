@@ -3,7 +3,7 @@ name: Weekly API Call
 on:
   schedule:
     # Every Sunday at 23:00 UTC (adjust if needed)
-    - cron: '0 23 * * 4'
+    - cron: '0 11 * * 0'
   workflow_dispatch: # lets you run manually if you want
 
 jobs:
