@@ -48,7 +48,7 @@ namespace AF_mobile_web_api.Services
         public async Task<MarketplaceSearch> LoadDataMarkeplaces(String? city = null)
         {
             var dateWeekAgo = DateTime.UtcNow.AddDays(-7);
-            dateWeekAgo = new DateTime(dateWeekAgo.Year, dateWeekAgo.Month, dateWeekAgo.Day, 20, 0, 0, dateWeekAgo.Kind);
+            dateWeekAgo = new DateTime(dateWeekAgo.Year, dateWeekAgo.Month, dateWeekAgo.Day, 9, 0, 0, dateWeekAgo.Kind);
 
             var recentEntry = await _dbContext.WebSearchResults
                 .Where(w => w.CreationDate >= dateWeekAgo)
@@ -67,10 +67,15 @@ namespace AF_mobile_web_api.Services
             }
 
             // Proceed with fetching and saving data
-            var responseNieruchomosci = await _nieruchomosciOnlineService.GetAllPagesAsync();
-            var responseMorizon = await _morizonApiService.GetPropertyListingDataAsync();
-            var responseOLX = await _olxApiService.GetOLXResponse();          
+            var nieruchomosciTask = _nieruchomosciOnlineService.GetAllPagesAsync();
+            var morizonTask = _morizonApiService.GetPropertyListingDataAsync();
+            var olxTask = _olxApiService.GetOLXResponse();
 
+            await Task.WhenAll(nieruchomosciTask, morizonTask, olxTask);
+
+            var responseNieruchomosci = await nieruchomosciTask;
+            var responseMorizon = await morizonTask;
+            var responseOLX = await olxTask;
 
             MarketplaceSearch combinedData = new MarketplaceSearch();
             combinedData.Data = responseOLX.Data.Union(responseMorizon.Data).ToList();
