@@ -97,9 +97,9 @@ namespace AF_mobile_web_api.Services
                 City = city ?? combinedData.Data.FirstOrDefault()?.Location.City ?? "Unknown"
             };
 
-            //_dbContext.WebSearchResults.Add(findings);
-            //await _dbContext.SaveChangesAsync();
-            //SavePropertyDataToDatabase(combinedData.Data);
+            _dbContext.WebSearchResults.Add(findings);
+            await _dbContext.SaveChangesAsync();
+            SavePropertyDataToDatabase(combinedData.Data);
 
             return combinedData;
         }
