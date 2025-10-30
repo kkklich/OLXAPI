@@ -48,7 +48,7 @@ namespace AF_mobile_web_api.Services
         public async Task<MarketplaceSearch> LoadDataMarkeplaces(String? city = null)
         {
             var dateWeekAgo = DateTime.UtcNow.AddDays(-7);
-            dateWeekAgo = new DateTime(dateWeekAgo.Year, dateWeekAgo.Month, dateWeekAgo.Day, 9, 0, 0, dateWeekAgo.Kind);
+            dateWeekAgo = new DateTime(dateWeekAgo.Year, dateWeekAgo.Month, dateWeekAgo.Day, 14, 0, 0, dateWeekAgo.Kind);
 
             var recentEntry = await _dbContext.WebSearchResults
                 .Where(w => w.CreationDate >= dateWeekAgo)
