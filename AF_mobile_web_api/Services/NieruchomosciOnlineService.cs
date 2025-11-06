@@ -1,4 +1,5 @@
 ﻿using AF_mobile_web_api.DTO;
+using AF_mobile_web_api.DTO.Enums;
 using Newtonsoft.Json.Linq;
 using System.Collections.Concurrent;
 using System.Globalization;
@@ -16,12 +17,12 @@ namespace AF_mobile_web_api.Services
             _httpClient = httpClient;
         }
 
-        public async Task<MarketplaceSearch> GetAllPagesAsync()
+        public async Task<MarketplaceSearch> GetAllPagesAsync(CityEnum city = CityEnum.Krakow)
         {
             int minPriceStart = 150000;
             int maxPriceEnd = 1000000;
             int step = 3000;
-            string BaseUrlTemplate = "https://krakow.nieruchomosci-online.pl/szukaj.html?3,mieszkanie,sprzedaz,,Krak%C3%B3w,,,,{0}-{1}&ajax=1";
+            string BaseUrlTemplate = "https://krakow.nieruchomosci-online.pl/szukaj.html?3,mieszkanie,sprzedaz,,{0},,,,{1}-{2}&ajax=1";
 
             var allResults = new ConcurrentBag<SearchData>();
             var priceRanges = Enumerable.Range(0, (maxPriceEnd - minPriceStart) / step)
@@ -29,13 +30,17 @@ namespace AF_mobile_web_api.Services
                 .ToList();
 
             // Runs in parallel with a concurrency limit (e.g., 10 tasks at a time)
+            var cityName = city.ToEncodedString();
             await Parallel.ForEachAsync(priceRanges, new ParallelOptions { MaxDegreeOfParallelism = 10 }, async (range, ct) =>
             {
-                string url = string.Format(BaseUrlTemplate, range.Min, range.Max);
+                string url = string.Format(BaseUrlTemplate, cityName, range.Min, range.Max);
                 var listings = await GetApartmentListingsAsync(url);
 
-                foreach (var item in listings)
-                    allResults.Add(item);
+                if (listings != null)
+                {
+                    foreach (var item in listings)
+                        allResults.Add(item);
+                }
             });
 
             var uniqueItems = allResults

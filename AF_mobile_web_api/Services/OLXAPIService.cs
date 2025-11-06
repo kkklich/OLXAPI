@@ -1,8 +1,6 @@
 ﻿using AF_mobile_web_api.DTO;
+using AF_mobile_web_api.DTO.Enums;
 using AF_mobile_web_api.Helper;
-using ApplicationDatabase.Models;
-using Azure;
-using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 
 namespace AF_mobile_web_api.Services
@@ -108,16 +106,16 @@ namespace AF_mobile_web_api.Services
             return $"{ConstantHelper.OLXAPI}?{query}"; // final URL
         }
 
-        public async Task<MarketplaceSearch> GetOLXResponse()
+        public async Task<MarketplaceSearch> GetOLXResponse(CityEnum city = CityEnum.Krakow)
         {
             MarketplaceSearch searchedData = new MarketplaceSearch();
 
             var results = await GetAllOffersAsync(
                 categoryId: ConstantHelper.RealEstateCategory, 
-                regionId: ConstantHelper.LesserPolandRegionId,
-                cityId: ConstantHelper.KrakowCityId,
+                regionId: city.ToEncodedRegionOLXString(),
+                cityId: city.ToEncodedOLXString(),
                 priceFrom: 50_000,
-                priceTo: 850_000              
+                priceTo: 999_000              
             );
             
             searchedData.Data.AddRange(results);            

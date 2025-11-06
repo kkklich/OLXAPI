@@ -14,4 +14,4 @@ jobs:
       - name: Call Render API endpoint
         run: |
           echo "Calling API..."
-          curl -X GET https://olxapi-jwcz.onrender.com/api/RealEstate/loadDataMarkeplaces
+          curl -X GET https://olxapi-jwcz.onrender.com/api/RealEstate/getdataForManyCities
