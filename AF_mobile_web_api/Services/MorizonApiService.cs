@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using AF_mobile_web_api.Helper;
 using Microsoft.OpenApi.Services;
+using AF_mobile_web_api.DTO.Enums;
 
 namespace AF_mobile_web_api.Services
 {
@@ -18,18 +19,18 @@ namespace AF_mobile_web_api.Services
             _httpClient = httpClient;           
         }
 
-        public async Task<MarketplaceSearch> GetPropertyListingDataAsync(string? searchUrl = null)
+        public async Task<MarketplaceSearch> GetPropertyListingDataAsync(CityEnum city = CityEnum.Krakow, string? searchUrl = null)
         {
             try
             {
-                var city = "krakow";              
+                var cityName = city.ToString().ToLower();
                 var allResults = new MarketplaceSearch { Data = new List<SearchData>() };
                 var tasks = new List<Task<MarketplaceSearch>>();
 
                 // Define price ranges to cover 100,000 to 1,000,000 PLN
                 int minPrice = 100000;
                 int maxPrice = 1000000;
-                int priceStep = 5000;          
+                int priceStep = 5000;
 
                 var contexts = new List<FetchContext>();
 
@@ -48,7 +49,7 @@ namespace AF_mobile_web_api.Services
                                 int priceTo = Math.Min(priceFrom + priceStep, maxPrice);
                                 var building = buildingType.ToString().ToLower() ?? "";
                                 var kindNumber = (int)kind;
-                                var url = $"/mieszkania/{building}/{city}/?ps%5Bprice_from%5D={priceFrom}&ps%5Bprice_to%5D={priceTo}&ps%5Bmarket_type%5D={kindNumber}";
+                                var url = $"/mieszkania/{building}/{cityName}/?ps%5Bprice_from%5D={priceFrom}&ps%5Bprice_to%5D={priceTo}&ps%5Bmarket_type%5D={kindNumber}";
                                 contexts.Add(new FetchContext
                                 {
                                     Url = url,
@@ -106,7 +107,7 @@ namespace AF_mobile_web_api.Services
                     }
 
                     // Add delay between batches to respect rate limits
-                    //await Task.Delay(2); // 2 ms delay between batches
+                    await Task.Delay(100); // 100 ms delay between batches
                 }
 
                 // Remove duplicates based on property ID

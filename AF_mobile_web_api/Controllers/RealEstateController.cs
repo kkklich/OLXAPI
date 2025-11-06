@@ -60,6 +60,20 @@ namespace AF_mobile_web_api.Controllers
             }
         }
         
+        [HttpGet("getdataForManyCities")]
+        public async Task<IActionResult> GetdataForManyCities()
+        {
+            try
+            {
+                var result = await _realEstate.GetdataForManyCities();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        
         [HttpGet("getRealEstate")]
         public async Task<IActionResult> GetDefaultRealEstate()
         {
