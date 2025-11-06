@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using AF_mobile_web_api.DTO;
+using AF_mobile_web_api.DTO.Enums;
 using AF_mobile_web_api.Helper;
 using ApplicationDatabase;
 using ApplicationDatabase.Models;
@@ -44,10 +45,20 @@ namespace AF_mobile_web_api.Services
             }
             return new MarketplaceSearch();
         }
-        
-        public async Task<MarketplaceSearch> LoadDataMarkeplaces(String? city = null)
+
+        public async Task<MarketplaceSearch> GetdataForManyCities()
         {
-            var dateWeekAgo = DateTime.UtcNow.AddDays(-7);
+            foreach (CityEnum city in Enum.GetValues(typeof(CityEnum)))
+            {
+                await LoadDataMarkeplaces(city);
+            }
+
+            return new MarketplaceSearch();
+        }
+
+        public async Task<MarketplaceSearch> LoadDataMarkeplaces(CityEnum city = CityEnum.Krakow)
+        {
+            var dateWeekAgo = DateTime.UtcNow.AddDays(-6);
             dateWeekAgo = new DateTime(dateWeekAgo.Year, dateWeekAgo.Month, dateWeekAgo.Day, 14, 0, 0, dateWeekAgo.Kind);
 
             var recentEntry = await _dbContext.WebSearchResults
@@ -67,9 +78,9 @@ namespace AF_mobile_web_api.Services
             }
 
             // Proceed with fetching and saving data
-            var nieruchomosciTask = _nieruchomosciOnlineService.GetAllPagesAsync();
-            var morizonTask = _morizonApiService.GetPropertyListingDataAsync();
-            var olxTask = _olxApiService.GetOLXResponse();
+            var nieruchomosciTask = _nieruchomosciOnlineService.GetAllPagesAsync(city);
+            var morizonTask = _morizonApiService.GetPropertyListingDataAsync(city);
+            var olxTask = _olxApiService.GetOLXResponse(city);
 
             await Task.WhenAll(nieruchomosciTask, morizonTask, olxTask);
 
@@ -94,7 +105,7 @@ namespace AF_mobile_web_api.Services
                 Name = combinedData.TotalCount.ToString(),
                 Content = JsonConvert.SerializeObject(combinedResponse.Data),
                 CreationDate = DateTime.UtcNow,
-                City = city ?? combinedData.Data.FirstOrDefault()?.Location.City ?? "Unknown"
+                City = city.ToString()
             };
 
             _dbContext.WebSearchResults.Add(findings);
