@@ -193,7 +193,7 @@ namespace AF_mobile_web_api.Services
 
                 // Basic properties
                 searchData.Id = property["id"]?.Value<string>() ?? property["idOnFrontend"]?.Value<string>() ?? "0";
-                searchData.Url = property["url"]?.Value<string>();
+                searchData.Url = "https://www.morizon.pl" + property["url"]?.Value<string>();
                 searchData.Title = property["title"]?.Value<string>() ?? property["advertisementText"]?.Value<string>();
 
                 // Parse creation date
