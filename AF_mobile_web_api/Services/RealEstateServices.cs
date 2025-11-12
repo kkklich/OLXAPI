@@ -7,7 +7,6 @@ using ApplicationDatabase.Models;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 
-
 namespace AF_mobile_web_api.Services
 {
     public class RealEstateServices
@@ -41,9 +40,36 @@ namespace AF_mobile_web_api.Services
                     Data = deserializedData ?? new List<SearchData>(),
                     TotalCount = recentEntry.Name != null ? int.Parse(recentEntry.Name) : 0,
                 };
+
+                GetUniqueByAreaFloorMarket(result.Data);
                 return result;
             }
             return new MarketplaceSearch();
+        }
+
+        private List<SearchData> GetUniqueByAreaFloorMarket(List<SearchData> list)
+        {
+            var uniqueDict = new Dictionary<(double Area, int Floor, string Market, double Price), SearchData>();
+            List<SearchData> uniqueList = new List<SearchData>();
+
+            foreach (var item in list)
+            {
+                var key = (item.Area, item.Floor, item.Market, item.Price);
+                if (!uniqueDict.ContainsKey(key))
+                {
+                    uniqueDict[key] = item;
+                }
+                else
+                {
+                    uniqueDict[key].Url += ", " + item.Url;
+                }
+            }
+
+            var xdd = uniqueDict.Values
+        .Where(sd => sd.Url.Contains(","))
+        .ToList();
+
+            return uniqueDict.Values.ToList();
         }
 
         public async Task<MarketplaceSearch> GetdataForManyCities()
@@ -62,7 +88,7 @@ namespace AF_mobile_web_api.Services
             dateWeekAgo = new DateTime(dateWeekAgo.Year, dateWeekAgo.Month, dateWeekAgo.Day, 14, 0, 0, dateWeekAgo.Kind);
 
             var recentEntry = await _dbContext.WebSearchResults
-                .Where(w => w.CreationDate >= dateWeekAgo)
+                .Where(w => w.CreationDate >= dateWeekAgo && w.City == city.ToString())
                 .OrderByDescending(w => w.CreationDate)
                 .FirstOrDefaultAsync();
 
