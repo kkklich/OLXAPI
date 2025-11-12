@@ -84,23 +84,16 @@ namespace AF_mobile_web_api.Services
 
         public async Task<MarketplaceSearch> LoadDataMarkeplaces(CityEnum city = CityEnum.Krakow)
         {
-            var dateWeekAgo = DateTime.UtcNow.AddDays(-6);
-            dateWeekAgo = new DateTime(dateWeekAgo.Year, dateWeekAgo.Month, dateWeekAgo.Day, 14, 0, 0, dateWeekAgo.Kind);
-
             var recentEntry = await _dbContext.WebSearchResults
-                .Where(w => w.CreationDate >= dateWeekAgo && w.City == city.ToString())
+                .Where(w => w.City == city.ToString())
                 .OrderByDescending(w => w.CreationDate)
                 .FirstOrDefaultAsync();
 
+            MarketplaceSearch result = new MarketplaceSearch();
             if (recentEntry != null)
             {
                 var deserializedData = JsonConvert.DeserializeObject<List<SearchData>>(recentEntry.Content);
-                MarketplaceSearch result = new MarketplaceSearch()
-                {
-                    Data = deserializedData ?? new List<SearchData>(),
-                    TotalCount = recentEntry.Name != null ? int.Parse(recentEntry.Name) + 1000000 : 0,
-                };
-                return result;
+                result.Data = deserializedData ?? new List<SearchData>();
             }
 
             // Proceed with fetching and saving data
@@ -111,34 +104,34 @@ namespace AF_mobile_web_api.Services
             await Task.WhenAll(nieruchomosciTask, morizonTask, olxTask);
 
             var responseNieruchomosci = await nieruchomosciTask;
-            var responseMorizon = await morizonTask;
+            var responsemorizon = await morizonTask;
             var responseOLX = await olxTask;
 
             MarketplaceSearch combinedData = new MarketplaceSearch();
-            combinedData.Data = responseOLX.Data.Union(responseMorizon.Data).ToList();
-            combinedData.Data = combinedData.Data.Union(responseNieruchomosci.Data).ToList();
-
-            combinedData.TotalCount = responseOLX.TotalCount + responseMorizon.TotalCount + responseNieruchomosci.TotalCount;
-
-            var combinedResponse = new MarketplaceSearch
-            {
-                TotalCount = combinedData.TotalCount,
-                Data = combinedData.Data
-            };
+            combinedData.Data = responseOLX.Data.Union(responsemorizon.Data).ToList();
+            combinedData.Data = combinedData.Data.Union(responseNieruchomosci.Data).ToList();            
 
             WebSearchResults findings = new WebSearchResults()
             {
                 Name = combinedData.TotalCount.ToString(),
-                Content = JsonConvert.SerializeObject(combinedResponse.Data),
+                Content = JsonConvert.SerializeObject(combinedData.Data),
                 CreationDate = DateTime.UtcNow,
                 City = city.ToString()
             };
 
             _dbContext.WebSearchResults.Add(findings);
             await _dbContext.SaveChangesAsync();
-            SavePropertyDataToDatabase(combinedData.Data);
+
+            var newData = CompareNewData(result.Data, combinedData.Data);
+            SavePropertyDataToDatabase(newData);
 
             return combinedData;
+        }
+
+        private List<SearchData> CompareNewData(List<SearchData> DbList, List<SearchData> NewList)
+        {
+            var comparer = new SearchDataComparer();
+            return NewList.Except(DbList, comparer).ToList();          
         }
 
         private void SavePropertyDataToDatabase(List<SearchData> data)
