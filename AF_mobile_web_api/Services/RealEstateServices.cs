@@ -119,11 +119,11 @@ namespace AF_mobile_web_api.Services
                 City = city.ToString()
             };
 
-            _dbContext.WebSearchResults.Add(findings);
-            await _dbContext.SaveChangesAsync();
+            //_dbContext.WebSearchResults.Add(findings);
+            //await _dbContext.SaveChangesAsync();
 
             var newData = CompareNewData(result.Data, combinedData.Data);
-            SavePropertyDataToDatabase(newData);
+            //SavePropertyDataToDatabase(newData);
 
             return combinedData;
         }
