@@ -238,7 +238,7 @@ namespace AF_mobile_web_api.Services
                     Number = ""
                 },
                 Description = a?.MetaTitle ?? "",
-                Floor = a.Floor,                
+                Floor = a.Floor,
                 Photos = new List<Photos>(), //todo get from photos json,
                 BuildingType = buildingType
             };

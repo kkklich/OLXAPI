@@ -13,7 +13,7 @@
 
     public class SearchData
     {
-        public string Id { get; set; } //  internal id  //todo change to string DB
+        public string Id { get; set; } //  internal id 
         public string Url { get; set; } //url of the offer
         public string Title { get; set; } //title of the offer
         public DateTime CreatedTime { get; set; } //date of creation
@@ -59,5 +59,48 @@
         OLX,
         Morizon,
         NieruchomsciOnline
+    }
+
+
+    public class SearchDataComparer : IEqualityComparer<SearchData>
+    {
+        public bool Equals(SearchData x, SearchData y)
+        {
+            if (x == null && y == null) return true;
+            if (x == null || y == null) return false;
+
+            return x.Id == y.Id &&
+                   //x.Url == y.Url &&
+                   x.Title == y.Title &&
+                   //x.CreatedTime == y.CreatedTime &&
+                   x.Price == y.Price &&
+                   x.PricePerMeter == y.PricePerMeter &&
+                   //x.Floor == y.Floor &&
+                   x.Market == y.Market &&
+                   //x.BuildingType == y.BuildingType &&
+                   //x.Area == y.Area &&
+                   x.Description == y.Description &&
+                   x.Private == y.Private &&
+                   x.WebName == y.WebName;
+        }
+
+        public int GetHashCode(SearchData obj)
+        {
+            if (obj == null) return 0;
+
+            return (obj.Id?.GetHashCode() ?? 0) ^
+                   //(obj.Url?.GetHashCode() ?? 0) ^
+                   (obj.Title?.GetHashCode() ?? 0) ^
+                   //obj.CreatedTime.GetHashCode() ^
+                   obj.Price.GetHashCode() ^
+                   obj.PricePerMeter.GetHashCode() ^
+                   //obj.Floor.GetHashCode() ^
+                   (obj.Market?.GetHashCode() ?? 0) ^
+                   //(obj.BuildingType?.GetHashCode() ?? 0) ^
+                   //obj.Area.GetHashCode() ^
+                   (obj.Description?.GetHashCode() ?? 0) ^
+                   obj.Private.GetHashCode() ^
+                   obj.WebName.GetHashCode();
+        }
     }
 }
