@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using AF_mobile_web_api.Mappings;
 using AF_mobile_web_api.Services;
 using ApplicationDatabase;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         builder.Configuration.GetConnectionString("ConnectionString"),
         new MySqlServerVersion(new Version(7, 0, 0)) // adjust version
     ));
+builder.Services.AddAutoMapper(typeof(MappingProfile));
 
 // Add services to the container.
 builder.Services
