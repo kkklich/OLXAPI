@@ -89,6 +89,21 @@ namespace AF_mobile_web_api.Controllers
         }
         
         
+        [HttpGet("getUniqueOffers")]
+        public async Task<IActionResult> getUniqueOffers()
+        {
+            try
+            {
+                var result = await _realEstate.GetUniqueOfferts();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        
+        
         [HttpGet("RealEstateStats")]
         public async Task<IActionResult> GetRealEstateStats()
         {
