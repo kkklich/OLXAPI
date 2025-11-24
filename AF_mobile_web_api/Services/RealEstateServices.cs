@@ -85,16 +85,15 @@ namespace AF_mobile_web_api.Services
 
             WebSearchResults findings = new WebSearchResults()
             {
-                Name = combinedData.TotalCount.ToString(),
+                Name = combinedData.Data.Count.ToString(),
                 Content = JsonConvert.SerializeObject(combinedData.Data),
                 CreationDate = DateTime.UtcNow,
                 City = city.ToString()
             };
 
-            _dbContext.WebSearchResults.Add(findings);
+            _dbContext.WebSearchResults.Add(findings); 
+             SavePropertyDataToDatabase(combinedData.Data);
             await _dbContext.SaveChangesAsync();
-
-            SavePropertyDataToDatabase(combinedData.Data);
 
             return combinedData;
         }
@@ -132,7 +131,7 @@ namespace AF_mobile_web_api.Services
             }
 
             _dbContext.PropertyData.AddRange(propertiesList);
-            _dbContext.SaveChanges();
+            //await _dbContext.SaveChangesAsync();
         }
 
         public async Task<List<SearchDataDTO>> GetUniqueOfferts()
