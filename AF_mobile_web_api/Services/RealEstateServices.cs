@@ -131,7 +131,6 @@ namespace AF_mobile_web_api.Services
             }
 
             _dbContext.PropertyData.AddRange(propertiesList);
-            //await _dbContext.SaveChangesAsync();
         }
 
         public async Task<List<SearchDataDTO>> GetUniqueOfferts()
