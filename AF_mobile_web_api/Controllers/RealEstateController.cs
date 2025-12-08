@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using AF_mobile_web_api.Services;
+using AF_mobile_web_api.Helper;
+using AF_mobile_web_api.DTO.Enums;
 
 namespace AF_mobile_web_api.Controllers
 { 
@@ -74,12 +76,12 @@ namespace AF_mobile_web_api.Controllers
             }
         }
         
-        [HttpGet("getRealEstate")]
-        public async Task<IActionResult> GetDefaultRealEstate()
+        [HttpGet("getRealEstate/{city}")]
+        public async Task<IActionResult> GetDefaultRealEstate(string city  = "Krakow")
         {
             try
             {
-                var result = await _realEstate.GetDataSave();
+                var result = await _realEstate.GetData(city);
                 return Ok(result);
             }
             catch (Exception ex)
@@ -124,6 +126,21 @@ namespace AF_mobile_web_api.Controllers
             try
             {
                 var result = await _statisticServices.GetDataWithGroupStatistics(groupBy);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        
+        
+        [HttpGet("getTimelinePrice/{city}")]
+        public async Task<IActionResult> GetTimelinePrice(string city)
+        {
+            try
+            {
+                var result = await _statisticServices.GetTimelinePrice(city);
                 return Ok(result);
             }
             catch (Exception ex)
