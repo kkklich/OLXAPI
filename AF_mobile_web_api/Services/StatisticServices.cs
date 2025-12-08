@@ -1,4 +1,7 @@
 ﻿using AF_mobile_web_api.DTO;
+using AF_mobile_web_api.DTO.Enums;
+using ApplicationDatabase;
+using Microsoft.EntityFrameworkCore;
 using System.Reflection;
 
 namespace AF_mobile_web_api.Services
@@ -6,15 +9,52 @@ namespace AF_mobile_web_api.Services
     public class StatisticServices
     {
         private readonly RealEstateServices _realEstate;
+        private readonly AppDbContext _dbContext;
 
-        public StatisticServices(RealEstateServices realEstate) 
+        public StatisticServices(RealEstateServices realEstate, AppDbContext dbContext)
         {
             _realEstate = realEstate;
+            _dbContext = dbContext;
+        }
+
+        public async Task<List<TimelinePriceDto>> GetTimelinePrice(string cityName)
+        {
+            if (string.IsNullOrWhiteSpace(cityName))
+                throw new ArgumentException("City name cannot be null or empty", nameof(cityName));
+
+            if (!Enum.TryParse<CityEnum>(cityName, true, out CityEnum city))
+                throw new ArgumentException($"Invalid city name: {cityName}. Valid cities: {string.Join(", ", Enum.GetNames<CityEnum>())}");
+
+
+            // Server-side: filter, group, aggregate (all translatable)
+            var groupedData = await _dbContext.PropertyData
+                .Where(p => p.City == city.ToString() && p.WebName == 0)
+                .GroupBy(p => p.AddedRecordTime.Date)
+                .Select(g => new
+                {
+                    Date = g.Key,
+                    AvgPrice = Math.Round(g.Average(x => x.Price), 1),
+                    AvgPricePerMeter = Math.Round(g.Average(x => x.PricePerMeter), 1)
+                })
+                .ToListAsync();
+
+            // Client-side: format and sort
+            var result = groupedData
+                .Select(x => new TimelinePriceDto
+                {
+                    AddedDate = x.Date.ToString("dd-MM-yyyy"),
+                    AvgPrice = x.AvgPrice,
+                    AvgPricePerMeter = x.AvgPricePerMeter
+                })
+                .OrderBy(x => DateTime.ParseExact(x.AddedDate, "dd-MM-yyyy", null))
+                .ToList();
+
+            return result;
         }
 
         public async Task<RealEstateStatistics> GetDataWithStatistics()
         {
-            var response = await _realEstate.GetDataSave();
+            var response = await _realEstate.GetData(CityEnum.Krakow.ToString());
             return CalculateStatistics(response.Data);
         }
 
@@ -34,7 +74,7 @@ namespace AF_mobile_web_api.Services
 
         public async Task<Dictionary<object, RealEstateStatistics>> GetDataWithGroupStatistics(string groupByProperty)
         {
-            var response = await _realEstate.GetDataSave();
+            var response = await _realEstate.GetData(CityEnum.Krakow.ToString());
 
             var propertyParts = groupByProperty.Split('.');
             var type = typeof(SearchData);

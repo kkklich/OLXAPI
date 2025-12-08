@@ -35,9 +35,10 @@ namespace AF_mobile_web_api.Services
             _mapper = mapper;
         }        
 
-        public async Task<MarketplaceSearch> GetDataSave()
+        public async Task<MarketplaceSearch> GetData(string city)
         {
             var recentEntry = await _dbContext.WebSearchResults
+                .Where(w => w.City.ToLower() == city.ToLower())
                 .OrderByDescending(w => w.CreationDate)
                 .FirstOrDefaultAsync();
 
@@ -135,7 +136,7 @@ namespace AF_mobile_web_api.Services
 
         public async Task<List<SearchDataDTO>> GetUniqueOfferts()
         {
-            var data = await GetDataSave();
+            var data = await GetData(CityEnum.Krakow.ToString());
             return GetUniqueByAreaFloorMarket(data.Data);
         }
 
