@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using AF_mobile_web_api.Services;
-using AF_mobile_web_api.Helper;
-using AF_mobile_web_api.DTO.Enums;
+using AF_mobile_web_api.DTO;
 
 namespace AF_mobile_web_api.Controllers
 { 
@@ -148,5 +147,34 @@ namespace AF_mobile_web_api.Controllers
                 return BadRequest(ex.Message);
             }
         }
+
+        [HttpGet("getGroupedStatistics/{groupBy}/{city}")]
+        public async Task<IActionResult> getGroupedStatistics(string groupBy, string city)
+        {
+            try
+            {
+                var result = await _statisticServices.GetBarChartData(city, groupBy);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("filterByParameter/{groupBy}/{city}/{parameter}")]
+        public async Task<IActionResult> FilterByParameter(string groupBy,  string city,  string parameter)
+        {
+            try
+            {
+                var chart = await _statisticServices.FilterByParameter(groupBy, city, parameter);
+                return Ok(chart);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
     }
 }
