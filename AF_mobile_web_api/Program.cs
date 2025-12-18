@@ -25,7 +25,9 @@ builder.Services
     .AddScoped<StatisticServices>()
     .AddScoped<MorizonApiService>()
     .AddScoped<OLXAPIService>()
-    .AddScoped<NieruchomosciOnlineService>();    
+    .AddScoped<NieruchomosciOnlineService>();   
+
+builder.Services.AddMemoryCache();
 
 builder.Services.AddControllers();  
 
