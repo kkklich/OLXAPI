@@ -61,7 +61,8 @@ namespace AF_mobile_web_api.Services
                 {
                     Date = g.Key,
                     AvgPrice = Math.Round(g.Average(x => x.Price), 1),
-                    AvgPricePerMeter = Math.Round(g.Average(x => x.PricePerMeter), 1)
+                    AvgPricePerMeter = Math.Round(g.Average(x => x.PricePerMeter), 1),
+                    Count = g.Count()
                 })
                 .ToListAsync();
 
@@ -71,7 +72,8 @@ namespace AF_mobile_web_api.Services
                 {
                     AddedDate = x.Date.ToString("dd-MM-yyyy"),
                     AvgPrice = x.AvgPrice,
-                    AvgPricePerMeter = x.AvgPricePerMeter
+                    AvgPricePerMeter = x.AvgPricePerMeter,
+                    Count = x.Count
                 })
                 .OrderBy(x => DateTime.ParseExact(x.AddedDate, "dd-MM-yyyy", null))
                 .ToList();
@@ -213,10 +215,6 @@ namespace AF_mobile_web_api.Services
             else
                 return (sortedAreas[(count / 2) - 1] + sortedAreas[count / 2]) / 2.0;
         }
-
-
-        // TODO: Converted from Angular CalculateStatisticsService.barChartDataByBuildingType
-       
 
         public async Task<ChartData> GetBarChartData(string city, string groupedBy)
         {

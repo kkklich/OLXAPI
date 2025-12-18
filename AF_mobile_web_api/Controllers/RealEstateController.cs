@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using AF_mobile_web_api.Services;
-using AF_mobile_web_api.DTO;
 
 namespace AF_mobile_web_api.Controllers
 { 
