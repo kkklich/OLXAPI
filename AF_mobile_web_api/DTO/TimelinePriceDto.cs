@@ -5,5 +5,6 @@
         public string AddedDate { get; set; } = string.Empty;
         public double AvgPrice { get; set; }
         public double AvgPricePerMeter { get; set; }
+        public int Count { get; set; }
     }
 }
