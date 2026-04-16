@@ -1,5 +1,6 @@
 ﻿using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.DTO.Enums;
+using AF_mobile_web_api.Services.Interfaces;
 using ApplicationDatabase;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -7,7 +8,7 @@ using System.Reflection;
 
 namespace AF_mobile_web_api.Services
 {
-    public class StatisticServices
+    public class StatisticServices: IStatisticServices
     {
         private readonly RealEstateServices _realEstate;
         private readonly AppDbContext _dbContext;
@@ -154,31 +155,10 @@ namespace AF_mobile_web_api.Services
                 Count = data.Count
             };
         }
-             
-
-      
 
         private double CalculateAvaragePrice(List<SearchData> data)
         {
             return data.Average(x => x.Price);
-        }
-        private double CalculateAvaragePricePerMeter(List<SearchData> data)
-        {
-            return data.Average(x => x.PricePerMeter);
-        }
-
-        private double CalculateMedianPrice(List<SearchData> data)
-        {
-            var sortedPrices = data.Select(x => x.Price).OrderBy(a => a).ToList();
-            int count = sortedPrices.Count;
-
-            if (count == 0)
-                return 0;
-
-            if (count % 2 == 1)
-                return sortedPrices[count / 2];
-            else
-                return (sortedPrices[(count / 2) - 1] + sortedPrices[count / 2]) / 2.0;
         }
         
         private double CalculateMedianPricePerMeter(List<SearchData> data)
@@ -193,13 +173,6 @@ namespace AF_mobile_web_api.Services
                 return sortedPrices[count / 2];
             else
                 return (sortedPrices[(count / 2) - 1] + sortedPrices[count / 2]) / 2.0;
-        }
-
-        private double CalculatePriceStandardDeviation(List<SearchData> data)
-        {
-            double avg = data.Average(x => x.Price);
-            double sumSquares = data.Sum(x => Math.Pow(x.Price - avg, 2));
-            return Math.Sqrt(sumSquares / data.Count);
         }
 
         private double CalculateMedianArea(List<SearchData> data)
@@ -524,29 +497,6 @@ namespace AF_mobile_web_api.Services
             }
             };
         }
-
-        private double CalculateAverage(List<double> values)
-        {
-            if (values.Count == 0) return 0;
-            return values.Average();
-        }
-
-        private double CalculateMedian(List<double> values)
-        {
-            if (values.Count == 0) return 0;
-            values.Sort();
-            int count = values.Count;
-            if (count % 2 == 1)
-            {
-                return values[count / 2];
-            }
-            return (values[count / 2 - 1] + values[count / 2]) / 2.0;
-        }
-
-
-
-
-
 
     }
 }

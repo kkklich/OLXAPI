@@ -1,14 +1,15 @@
 ﻿using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.DTO.Enums;
 using AF_mobile_web_api.Helper;
+using AF_mobile_web_api.Services.Interfaces;
 using Newtonsoft.Json;
 
 namespace AF_mobile_web_api.Services
 {
-    public class OLXAPIService
+    public class OLXAPIService: IOLXAPIService
     {
-        private readonly HTTPClientServices _httpClient;
-        public OLXAPIService(HTTPClientServices httpClient)
+        private readonly IHTTPClientServices _httpClient;
+        public OLXAPIService(IHTTPClientServices httpClient)
         {
             _httpClient = httpClient;
         }
@@ -163,15 +164,7 @@ namespace AF_mobile_web_api.Services
                 Lon = data?.Map?.Lon ?? 0
             };
             record.WebName = WebName.OLX;
-
-            //record.Photos.AddRange(data.Photos.Select(p => new Photos
-            //{
-            //    Id = p.Id,
-            //    Filename = p.Filename,
-            //    Width = p.Width,
-            //    Height = p.Height,
-            //    Link = p.Link
-            //}));
+                   
 
             return record;
         }

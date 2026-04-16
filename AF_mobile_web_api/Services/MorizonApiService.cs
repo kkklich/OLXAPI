@@ -1,22 +1,19 @@
 ﻿using AF_mobile_web_api.DTO;
-using System.Text.Json;
-using System.Text;
+using AF_mobile_web_api.DTO.Enums;
+using AF_mobile_web_api.Helper;
+using AF_mobile_web_api.Services.Interfaces;
 using Newtonsoft.Json.Linq;
 using System.Globalization;
 using System.Text.RegularExpressions;
-using AF_mobile_web_api.Helper;
-using Microsoft.OpenApi.Services;
-using AF_mobile_web_api.DTO.Enums;
 
 namespace AF_mobile_web_api.Services
 {
-    public class MorizonApiService
+    public class MorizonApiService: IMorizonApiService
     {
-        private readonly HTTPClientServices _httpClient;
-
-        public MorizonApiService(HTTPClientServices httpClient)
+        private readonly IHTTPClientServices _httpClient;
+        public MorizonApiService(IHTTPClientServices httpClient)
         {
-            _httpClient = httpClient;           
+            _httpClient = httpClient;
         }
 
         public async Task<MarketplaceSearch> GetPropertyListingDataAsync(CityEnum city = CityEnum.Krakow, string? searchUrl = null)
