@@ -1,7 +1,7 @@
 ﻿using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.DTO.Enums;
+using AF_mobile_web_api.Repositories.Interfaces;
 using AF_mobile_web_api.Services.Interfaces;
-using ApplicationDatabase;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using System.Reflection;
@@ -10,19 +10,18 @@ namespace AF_mobile_web_api.Services
 {
     public class StatisticServices: IStatisticServices
     {
+        private readonly IPropertyDataRepository _propertyDataRepository;
         private readonly IRealEstateServices _realEstate;
-        private readonly AppDbContext _dbContext;
-
         private readonly IMemoryCache _cache;
 
         // np. 10 minut cache
         private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(120);
 
-        public StatisticServices(IRealEstateServices realEstate, AppDbContext dbContext, IMemoryCache cache)
+        public StatisticServices(IRealEstateServices realEstate, IMemoryCache cache, IPropertyDataRepository propertyDataRepository)
         {
             _realEstate = realEstate;
-            _dbContext = dbContext;
             _cache = cache;
+            _propertyDataRepository = propertyDataRepository;
         }
 
         private async Task<List<SearchData>> GetCachedRealEstateDataAsync(string city)
@@ -54,9 +53,8 @@ namespace AF_mobile_web_api.Services
             if (!Enum.TryParse<CityEnum>(cityName, true, out CityEnum city))
                 throw new ArgumentException($"Invalid city name: {cityName}. Valid cities: {string.Join(", ", Enum.GetNames<CityEnum>())}");
 
-            // Server-side: filter, group, aggregate (all translatable)
-            var groupedData = await _dbContext.PropertyData
-                .Where(p => p.City == city.ToString())
+            var property = await _propertyDataRepository.GetPropertiesBySearchResultIdAsync(city.ToString());
+            var groupedData = property
                 .GroupBy(p => p.AddedRecordTime.Date)
                 .Select(g => new
                 {
@@ -65,7 +63,7 @@ namespace AF_mobile_web_api.Services
                     AvgPricePerMeter = Math.Round(g.Average(x => x.PricePerMeter), 1),
                     Count = g.Count()
                 })
-                .ToListAsync();
+                .ToList();
 
             // Client-side: format and sort
             var result = groupedData
