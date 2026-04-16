@@ -10,7 +10,7 @@ namespace AF_mobile_web_api.Services
 {
     public class StatisticServices: IStatisticServices
     {
-        private readonly RealEstateServices _realEstate;
+        private readonly IRealEstateServices _realEstate;
         private readonly AppDbContext _dbContext;
 
         private readonly IMemoryCache _cache;
@@ -18,7 +18,7 @@ namespace AF_mobile_web_api.Services
         // np. 10 minut cache
         private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(120);
 
-        public StatisticServices(RealEstateServices realEstate, AppDbContext dbContext, IMemoryCache cache)
+        public StatisticServices(IRealEstateServices realEstate, AppDbContext dbContext, IMemoryCache cache)
         {
             _realEstate = realEstate;
             _dbContext = dbContext;
@@ -159,8 +159,7 @@ namespace AF_mobile_web_api.Services
         private double CalculateAvaragePrice(List<SearchData> data)
         {
             return data.Average(x => x.Price);
-        }
-        
+        }        
         private double CalculateMedianPricePerMeter(List<SearchData> data)
         {
             var sortedPrices = data.Select(x => x.PricePerMeter).OrderBy(a => a).ToList();
@@ -352,11 +351,6 @@ namespace AF_mobile_web_api.Services
 
             return current;
         }
-
-
-
-
-
 
         public async Task<ChartData> FilterByParameter(string groupBy, string city, string parameter)
         {

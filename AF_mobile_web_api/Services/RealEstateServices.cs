@@ -12,15 +12,15 @@ namespace AF_mobile_web_api.Services
     public class RealEstateServices: IRealEstateServices
     {
         private readonly AppDbContext _dbContext;
-        private readonly OLXAPIService _olxApiService;
-        private readonly MorizonApiService _morizonApiService;
-        private readonly NieruchomosciOnlineService _nieruchomosciOnlineService;
+        private readonly IOLXAPIService _olxApiService;
+        private readonly IMorizonApiService _morizonApiService;
+        private readonly INieruchomosciOnlineService _nieruchomosciOnlineService;
         private readonly IMapper _mapper;
 
         public RealEstateServices(AppDbContext dbContext,
-            OLXAPIService olxApiService,
-            MorizonApiService morizonApiService, 
-            NieruchomosciOnlineService nieruchomosciOnlineService,
+            IOLXAPIService olxApiService,
+            IMorizonApiService morizonApiService, 
+            INieruchomosciOnlineService nieruchomosciOnlineService,
             IMapper mapper)            
         {
             _dbContext = dbContext;
@@ -76,8 +76,8 @@ namespace AF_mobile_web_api.Services
             var responseOLX = await olxTask;
 
             MarketplaceSearch combinedData = new MarketplaceSearch();
-            combinedData.Data = responseOLX.Data.Union(responsemorizon.Data).ToList();
-            combinedData.Data = combinedData.Data.Union(responseNieruchomosci.Data).ToList();            
+            var olxMorizonData = responseOLX.Data.Union(responsemorizon.Data).ToList();
+            combinedData.Data = olxMorizonData.Union(responseNieruchomosci.Data).ToList();            
 
             WebSearchResults findings = new WebSearchResults()
             {
@@ -96,30 +96,7 @@ namespace AF_mobile_web_api.Services
 
         private void SavePropertyDataToDatabase(List<SearchData> data)
         {
-            List<PropertyData> propertiesList = new List<PropertyData>();
-            foreach (var item in data)
-            {
-                var property = new PropertyData  ///TODO add automapper
-                {
-                    OffertId = item.Id,
-                    Url = item.Url,
-                    Title = item.Title,
-                    CreatedTime = item.CreatedTime,
-                    Private = item.Private,
-                    Price = item.Price,
-                    PricePerMeter = item.PricePerMeter,
-                    Floor = item.Floor,
-                    Market = item.Market,
-                    BuildingType = item.BuildingType,
-                    Area = item.Area,
-                    City = item.Location.City,
-                    AddedRecordTime = DateTime.UtcNow,
-                    WebName = (int)item.WebName
-                };
-
-                propertiesList.Add(property);
-            }
-
+            var propertiesList = _mapper.Map<List<PropertyData>>(data);
             _dbContext.PropertyData.AddRange(propertiesList);
         }
 
@@ -132,7 +109,6 @@ namespace AF_mobile_web_api.Services
         private List<SearchDataDTO> GetUniqueByAreaFloorMarket(List<SearchData> list)
         {
             var uniqueDict = new Dictionary<(double Area, int Floor, string Market, double Price), SearchData>();
-            List<SearchData> uniqueList = new List<SearchData>();
 
             foreach (var item in list)
             {
@@ -146,10 +122,6 @@ namespace AF_mobile_web_api.Services
                     uniqueDict[key].Url += ", " + item.Url;
                 }
             }
-
-            var xdd = uniqueDict.Values
-                .Where(sd => sd.Url.Contains(","))
-                .ToList();
 
             return _mapper.Map<List<SearchDataDTO>>(uniqueDict.Values);
         }

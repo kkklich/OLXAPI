@@ -182,7 +182,7 @@ namespace AF_mobile_web_api.Services
                 },
                 Description = a?.MetaTitle ?? "",
                 Floor = a.Floor,
-                Photos = new List<Photos>(), //todo get from photos json,
+                Photos = new List<Photos>(),
                 BuildingType = buildingType
             };
             

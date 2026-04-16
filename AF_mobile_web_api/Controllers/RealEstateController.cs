@@ -1,16 +1,18 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using AF_mobile_web_api.Services;
+using AF_mobile_web_api.Services.Interfaces;
 
 namespace AF_mobile_web_api.Controllers
-{ 
+{
+    [ApiController]
     [Route("api/[controller]")]
     public class RealEstateController : ControllerBase
     {
-        private readonly RealEstateServices _realEstate;
-        private readonly StatisticServices _statisticServices;
-        private readonly MorizonApiService _morizonApiService;
-        private readonly NieruchomosciOnlineService _nieruchomosciOnlineService;
-        public RealEstateController(RealEstateServices realEstate, StatisticServices statisticServices, MorizonApiService morizonApiService, NieruchomosciOnlineService nieruchomosciOnlineService)
+        private readonly IRealEstateServices _realEstate;
+        private readonly IStatisticServices _statisticServices;
+        private readonly IMorizonApiService _morizonApiService;
+        private readonly INieruchomosciOnlineService _nieruchomosciOnlineService;
+        public RealEstateController(IRealEstateServices realEstate, IStatisticServices statisticServices, IMorizonApiService morizonApiService, INieruchomosciOnlineService nieruchomosciOnlineService)
         {
             _realEstate = realEstate;
             _statisticServices = statisticServices;
