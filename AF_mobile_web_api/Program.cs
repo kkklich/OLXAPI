@@ -49,11 +49,15 @@ builder.Logging.AddDebug();
 builder.Logging.AddEventSourceLogger();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
+
+var allowedFrontendUrl = builder.Configuration["AllowedOrigins:Frontend"]
+                         ?? "http://localhost:4200";
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowSpecificOrigin",
         builder => builder
-            .AllowAnyOrigin()
+            .WithOrigins(allowedFrontendUrl)
             .AllowAnyMethod()
             .AllowAnyHeader());
 });
