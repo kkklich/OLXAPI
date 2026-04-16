@@ -23,11 +23,12 @@ builder.Services.AddAutoMapper(typeof(MappingProfile));
 builder.Services.AddHttpClient(); // Still needed for the factory!
 builder.Services.AddTransient<IHTTPClientServices, HTTPClientServices>();
 
-builder.Services.AddScoped<IRealEstateServices, RealEstateServices>();
-builder.Services.AddScoped<IStatisticServices, StatisticServices>();
 builder.Services.AddScoped<IOLXAPIService, OLXAPIService>();
 builder.Services.AddScoped<INieruchomosciOnlineService, NieruchomosciOnlineService>();
 builder.Services.AddScoped<IMorizonApiService, MorizonApiService>();
+builder.Services.AddScoped<IRealEstateServices, RealEstateServices>();
+builder.Services.AddScoped<IStatisticServices, StatisticServices>();
+
 
 builder.Services.AddMemoryCache();//TODO add redis cache for better performance and scalability
 
