@@ -1,8 +1,6 @@
-﻿using System.Globalization;
-using System.Text.RegularExpressions;
-using AF_mobile_web_api.DTO;
+﻿using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.DTO.Enums;
-using AF_mobile_web_api.Helper;
+using AF_mobile_web_api.Services.Interfaces;
 using ApplicationDatabase;
 using ApplicationDatabase.Models;
 using AutoMapper;
@@ -11,23 +9,20 @@ using Newtonsoft.Json;
 
 namespace AF_mobile_web_api.Services
 {
-    public class RealEstateServices
+    public class RealEstateServices: IRealEstateServices
     {
-        private readonly HTTPClientServices _httpClient;
         private readonly AppDbContext _dbContext;
         private readonly OLXAPIService _olxApiService;
         private readonly MorizonApiService _morizonApiService;
         private readonly NieruchomosciOnlineService _nieruchomosciOnlineService;
         private readonly IMapper _mapper;
 
-        public RealEstateServices(HTTPClientServices httpClient,
-            AppDbContext dbContext,
+        public RealEstateServices(AppDbContext dbContext,
             OLXAPIService olxApiService,
             MorizonApiService morizonApiService, 
             NieruchomosciOnlineService nieruchomosciOnlineService,
             IMapper mapper)            
         {
-            _httpClient = httpClient;
             _dbContext = dbContext;
             _olxApiService = olxApiService;
             _morizonApiService = morizonApiService;
@@ -99,18 +94,12 @@ namespace AF_mobile_web_api.Services
             return combinedData;
         }
 
-        private List<SearchData> CompareNewData(List<SearchData> DbList, List<SearchData> NewList)
-        {
-            var comparer = new SearchDataComparer();
-            return NewList.Except(DbList, comparer).ToList();          
-        }
-
         private void SavePropertyDataToDatabase(List<SearchData> data)
         {
             List<PropertyData> propertiesList = new List<PropertyData>();
             foreach (var item in data)
             {
-                var property = new PropertyData
+                var property = new PropertyData  ///TODO add automapper
                 {
                     OffertId = item.Id,
                     Url = item.Url,
@@ -159,69 +148,10 @@ namespace AF_mobile_web_api.Services
             }
 
             var xdd = uniqueDict.Values
-        .Where(sd => sd.Url.Contains(","))
-        .ToList();
+                .Where(sd => sd.Url.Contains(","))
+                .ToList();
 
             return _mapper.Map<List<SearchDataDTO>>(uniqueDict.Values);
-        }
-
-        private List<SearchDataDTO> GetUniqueByAreaFloorMarket2(List<SearchData> list)
-        {
-
-            //todo check Description and Title similarity and Price 15% diffrent
-            //var titleSim = GetSimilarity(Title1, Title2);, if titleSim > 0.5 then it means that descriptions are similar
-            var uniqueDict = new Dictionary<(double Area, int Floor, string Market), SearchData>();
-            var duplicatesDict = new Dictionary<(double Area, int Floor, string Market), List<SearchData>>();
-            var finalList = new Dictionary<(double Area, int Floor, string Market), List<SearchData>>();
-            List<SearchData> uniqueList = new List<SearchData>();
-
-            foreach (var item in list)
-            {
-                var key = (item.Area, item.Floor, item.Market);
-                if (!uniqueDict.ContainsKey(key))
-                {
-                    uniqueDict[key] = item;
-                    duplicatesDict[key] = new List<SearchData>() { item };
-                }
-                else
-                {
-                    duplicatesDict[key].Add(item);
-
-                }
-            }
-
-            var ssss = duplicatesDict.Where(kv => kv.Value.Count > 1).ToList();
-            List<SearchData> final = new List<SearchData>();
-
-            foreach (var item in ssss)
-            {
-                var search = new SearchData();
-
-                for (int i = 0; i < item.Value.Count; i++)
-                {
-                    for (int j = i + 1; j < item.Value.Count; j++)
-                    {
-                        if (item.Value[i].WebName == item.Value[j].WebName)
-                            continue;
-
-                        var firstItem = item.Value[i];
-                        var secondItem = item.Value[j];
-                        double priceDiff = Math.Abs(item.Value[i].Price - item.Value[j].Price) / Math.Max(item.Value[i].Price, item.Value[j].Price);
-                        if (priceDiff < 0.05)
-                        {
-                            item.Value[i].Url += "," + item.Value[j].Url;
-                            if (search?.Url == null)
-                                search = item.Value[i];
-                            else
-                                search.Url += "," + item.Value[j].Url;
-                        }
-                    }
-                }
-                final.Add(search);
-
-            }
-
-            return _mapper.Map<List<SearchDataDTO>>(final);
         }
     }
 }
