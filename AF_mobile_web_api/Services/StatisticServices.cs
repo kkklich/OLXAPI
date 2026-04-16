@@ -34,7 +34,7 @@ namespace AF_mobile_web_api.Services
                 return cached;
             }
 
-            var results = (await _realEstate.GetData(city)).Data;
+            var results = (await _realEstate.GetDataAsync(city)).Data;
 
             var options = new MemoryCacheEntryOptions
             {
@@ -84,7 +84,7 @@ namespace AF_mobile_web_api.Services
 
         public async Task<RealEstateStatistics> GetDataWithStatistics()
         {
-            var response = await _realEstate.GetData(CityEnum.Krakow.ToString());
+            var response = await _realEstate.GetDataAsync(CityEnum.Krakow.ToString());
             return CalculateStatistics(response.Data);
         }
 
@@ -104,7 +104,7 @@ namespace AF_mobile_web_api.Services
 
         public async Task<Dictionary<object, RealEstateStatistics>> GetDataWithGroupStatistics(string groupByProperty)
         {
-            var response = await _realEstate.GetData(CityEnum.Krakow.ToString());
+            var response = await _realEstate.GetDataAsync(CityEnum.Krakow.ToString());
 
             var propertyParts = groupByProperty.Split('.');
             var type = typeof(SearchData);

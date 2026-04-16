@@ -5,10 +5,10 @@ namespace AF_mobile_web_api.Services.Interfaces
 {
     public interface IRealEstateServices
     {
-        Task<MarketplaceSearch> GetData(string city);
-        Task<MarketplaceSearch> GetdataForManyCities();
-        Task<MarketplaceSearch> LoadDataMarkeplaces(CityEnum city = CityEnum.Krakow);
-        Task<List<SearchDataDTO>> GetUniqueOfferts();
+        Task<MarketplaceSearch> GetDataAsync(string city);
+        Task<MarketplaceSearch> GetdataForManyCitiesAsync();
+        Task<MarketplaceSearch> LoadDataMarkeplacesAsync(CityEnum city = CityEnum.Krakow);
+        Task<List<SearchDataDTO>> GetUniqueOffertsAsync();
 
 
     }

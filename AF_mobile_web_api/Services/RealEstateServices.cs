@@ -30,7 +30,7 @@ namespace AF_mobile_web_api.Services
             _mapper = mapper;
         }        
 
-        public async Task<MarketplaceSearch> GetData(string city)
+        public async Task<MarketplaceSearch> GetDataAsync(string city)
         {
             var recentEntry = await _dbContext.WebSearchResults
                 .Where(w => w.City.ToLower() == city.ToLower())
@@ -52,34 +52,33 @@ namespace AF_mobile_web_api.Services
         }
 
        
-        public async Task<MarketplaceSearch> GetdataForManyCities()
+        public async Task<MarketplaceSearch> GetdataForManyCitiesAsync()
         {
             foreach (CityEnum city in Enum.GetValues(typeof(CityEnum)))
             {
-                await LoadDataMarkeplaces(city);
+                await LoadDataMarkeplacesAsync(city);
             }
 
             return new MarketplaceSearch();
         }
 
-        public async Task<MarketplaceSearch> LoadDataMarkeplaces(CityEnum city = CityEnum.Krakow)
+        public async Task<MarketplaceSearch> LoadDataMarkeplacesAsync(CityEnum city = CityEnum.Krakow)
         {
-            // Proceed with fetching and saving data
             var nieruchomosciTask = _nieruchomosciOnlineService.GetAllPagesAsync(city);
             var morizonTask = _morizonApiService.GetPropertyListingDataAsync(city);
             var olxTask = _olxApiService.GetOLXResponse(city);
 
             await Task.WhenAll(nieruchomosciTask, morizonTask, olxTask);
 
-            var responseNieruchomosci = await nieruchomosciTask;
-            var responsemorizon = await morizonTask;
-            var responseOLX = await olxTask;
+            var combinedData = new MarketplaceSearch
+            {
+                Data = olxTask.Result.Data
+                    .Union(morizonTask.Result.Data)
+                    .Union(nieruchomosciTask.Result.Data)
+                    .ToList()
+            };
 
-            MarketplaceSearch combinedData = new MarketplaceSearch();
-            var olxMorizonData = responseOLX.Data.Union(responsemorizon.Data).ToList();
-            combinedData.Data = olxMorizonData.Union(responseNieruchomosci.Data).ToList();            
-
-            WebSearchResults findings = new WebSearchResults()
+            var findings = new WebSearchResults
             {
                 Name = combinedData.Data.Count.ToString(),
                 Content = JsonConvert.SerializeObject(combinedData.Data),
@@ -87,8 +86,9 @@ namespace AF_mobile_web_api.Services
                 City = city.ToString()
             };
 
-            _dbContext.WebSearchResults.Add(findings); 
+            await _dbContext.WebSearchResults.AddAsync(findings);
             await SavePropertyDataToDatabaseAsync(combinedData.Data);
+
             await _dbContext.SaveChangesAsync();
 
             return combinedData;
@@ -100,9 +100,9 @@ namespace AF_mobile_web_api.Services
             await _dbContext.PropertyData.AddRangeAsync(propertiesList);
         }
 
-        public async Task<List<SearchDataDTO>> GetUniqueOfferts()
+        public async Task<List<SearchDataDTO>> GetUniqueOffertsAsync()
         {
-            var data = await GetData(CityEnum.Krakow.ToString());
+            var data = await GetDataAsync(CityEnum.Krakow.ToString());
             return GetUniqueByAreaFloorMarket(data.Data);
         }
 
