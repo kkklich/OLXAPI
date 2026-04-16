@@ -36,28 +36,28 @@ namespace AF_mobile_web_api.Controllers
         [HttpGet("loadDataMarkeplaces")]
         public async Task<IActionResult> LoadDataMarkeplaces()
         {
-            var result = await _realEstate.LoadDataMarkeplaces();
+            var result = await _realEstate.LoadDataMarkeplacesAsync();
             return Ok(result);            
         }
         
         [HttpGet("getdataForManyCities")]
         public async Task<IActionResult> GetdataForManyCities()
         {
-            var result = await _realEstate.GetdataForManyCities();
+            var result = await _realEstate.GetdataForManyCitiesAsync();
             return Ok(result);          
         }
         
         [HttpGet("getRealEstate/{city}")]
         public async Task<IActionResult> GetDefaultRealEstate(string city  = "Krakow")
         {
-            var result = await _realEstate.GetData(city);
+            var result = await _realEstate.GetDataAsync(city);
             return Ok(result);            
         }
                 
         [HttpGet("getUniqueOffers")]
         public async Task<IActionResult> getUniqueOffers()
         {
-            var result = await _realEstate.GetUniqueOfferts();
+            var result = await _realEstate.GetUniqueOffertsAsync();
             return Ok(result);         
         }
                 
