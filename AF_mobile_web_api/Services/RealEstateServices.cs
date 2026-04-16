@@ -88,16 +88,16 @@ namespace AF_mobile_web_api.Services
             };
 
             _dbContext.WebSearchResults.Add(findings); 
-             SavePropertyDataToDatabase(combinedData.Data);
+            await SavePropertyDataToDatabaseAsync(combinedData.Data);
             await _dbContext.SaveChangesAsync();
 
             return combinedData;
         }
 
-        private void SavePropertyDataToDatabase(List<SearchData> data)
+        private async Task SavePropertyDataToDatabaseAsync(List<SearchData> data)
         {
             var propertiesList = _mapper.Map<List<PropertyData>>(data);
-            _dbContext.PropertyData.AddRange(propertiesList);
+            await _dbContext.PropertyData.AddRangeAsync(propertiesList);
         }
 
         public async Task<List<SearchDataDTO>> GetUniqueOfferts()
