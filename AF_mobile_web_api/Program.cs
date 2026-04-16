@@ -1,4 +1,5 @@
 using AF_mobile_web_api.Mappings;
+using AF_mobile_web_api.Middleware;
 using AF_mobile_web_api.Services;
 using AF_mobile_web_api.Services.Interfaces;
 using ApplicationDatabase;
@@ -51,6 +52,8 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+app.UseMiddleware<ExceptionMiddleware>();
 
 app.UseCors("AllowSpecificOrigin");
 
