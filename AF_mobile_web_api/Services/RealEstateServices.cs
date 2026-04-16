@@ -1,5 +1,6 @@
 ﻿using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.DTO.Enums;
+using AF_mobile_web_api.Repositories.Interfaces;
 using AF_mobile_web_api.Services.Interfaces;
 using ApplicationDatabase;
 using ApplicationDatabase.Models;
@@ -11,32 +12,32 @@ namespace AF_mobile_web_api.Services
 {
     public class RealEstateServices: IRealEstateServices
     {
-        private readonly AppDbContext _dbContext;
         private readonly IOLXAPIService _olxApiService;
         private readonly IMorizonApiService _morizonApiService;
         private readonly INieruchomosciOnlineService _nieruchomosciOnlineService;
         private readonly IMapper _mapper;
+        private readonly IRealEstateRepository _realEstateRepository;
+        private readonly IPropertyDataRepository _propertyDataRepository;
 
-        public RealEstateServices(AppDbContext dbContext,
+        public RealEstateServices(
             IOLXAPIService olxApiService,
             IMorizonApiService morizonApiService, 
             INieruchomosciOnlineService nieruchomosciOnlineService,
-            IMapper mapper)            
+            IMapper mapper,
+            IRealEstateRepository realEstateRepository,
+            IPropertyDataRepository propertyDataRepository)            
         {
-            _dbContext = dbContext;
             _olxApiService = olxApiService;
             _morizonApiService = morizonApiService;
             _nieruchomosciOnlineService = nieruchomosciOnlineService;
             _mapper = mapper;
+            _realEstateRepository = realEstateRepository;
+            _propertyDataRepository = propertyDataRepository;
         }        
 
         public async Task<MarketplaceSearch> GetDataAsync(string city)
         {
-            var recentEntry = await _dbContext.WebSearchResults
-                .Where(w => w.City.ToLower() == city.ToLower())
-                .OrderByDescending(w => w.CreationDate)
-                .FirstOrDefaultAsync();
-
+            var recentEntry = await _realEstateRepository.GetLatestSearchByCityAsync(city);
             if (recentEntry != null)
             {
                 var deserializedData = JsonConvert.DeserializeObject<List<SearchData>>(recentEntry.Content);
@@ -85,19 +86,13 @@ namespace AF_mobile_web_api.Services
                 CreationDate = DateTime.UtcNow,
                 City = city.ToString()
             };
+                        
+            var propertiesList = _mapper.Map<List<PropertyData>>(combinedData.Data);
 
-            await _dbContext.WebSearchResults.AddAsync(findings);
-            await SavePropertyDataToDatabaseAsync(combinedData.Data);
-
-            await _dbContext.SaveChangesAsync();
+            await _realEstateRepository.SaveWebSearchResultAsync(findings);
+            await _propertyDataRepository.SaveMarketplaceDataAsync(propertiesList);
 
             return combinedData;
-        }
-
-        private async Task SavePropertyDataToDatabaseAsync(List<SearchData> data)
-        {
-            var propertiesList = _mapper.Map<List<PropertyData>>(data);
-            await _dbContext.PropertyData.AddRangeAsync(propertiesList);
         }
 
         public async Task<List<SearchDataDTO>> GetUniqueOffertsAsync()

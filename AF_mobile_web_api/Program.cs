@@ -1,5 +1,7 @@
 using AF_mobile_web_api.Mappings;
 using AF_mobile_web_api.Middleware;
+using AF_mobile_web_api.Repositories;
+using AF_mobile_web_api.Repositories.Interfaces;
 using AF_mobile_web_api.Services;
 using AF_mobile_web_api.Services.Interfaces;
 using ApplicationDatabase;
@@ -23,6 +25,11 @@ builder.Services.AddAutoMapper(typeof(MappingProfile));
 
 builder.Services.AddHttpClient(); // Still needed for the factory!
 builder.Services.AddTransient<IHTTPClientServices, HTTPClientServices>();
+
+builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+
+builder.Services.AddScoped<IPropertyDataRepository, PropertyDataRepository>();
+builder.Services.AddScoped<IRealEstateRepository, RealEstateRepository>();
 
 builder.Services.AddScoped<IOLXAPIService, OLXAPIService>();
 builder.Services.AddScoped<INieruchomosciOnlineService, NieruchomosciOnlineService>();
