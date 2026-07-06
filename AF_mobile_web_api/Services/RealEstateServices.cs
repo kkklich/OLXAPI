@@ -1,4 +1,5 @@
-﻿using AF_mobile_web_api.DTO;
+﻿using AF_mobile_web_api.Domain;
+using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.DTO.Enums;
 using AF_mobile_web_api.Repositories.Interfaces;
 using AF_mobile_web_api.Services.Interfaces;
