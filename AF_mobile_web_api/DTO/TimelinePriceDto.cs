@@ -1,6 +1,6 @@
 ﻿namespace AF_mobile_web_api.DTO
 {
-    public class TimelinePriceDto
+    public class TimelinePriceDTO
     {
         public string AddedDate { get; set; } = string.Empty;
         public double AvgPrice { get; set; }

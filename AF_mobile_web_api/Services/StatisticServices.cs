@@ -1,4 +1,5 @@
-﻿using AF_mobile_web_api.DTO;
+﻿using AF_mobile_web_api.Domain;
+using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.DTO.Enums;
 using AF_mobile_web_api.Repositories.Interfaces;
 using AF_mobile_web_api.Services.Interfaces;
@@ -45,7 +46,7 @@ namespace AF_mobile_web_api.Services
             return results;
         }
 
-        public async Task<List<TimelinePriceDto>> GetTimelinePrice(string cityName)
+        public async Task<List<TimelinePriceDTO>> GetTimelinePrice(string cityName)
         {
             if (string.IsNullOrWhiteSpace(cityName))
                 throw new ArgumentException("City name cannot be null or empty", nameof(cityName));
@@ -67,7 +68,7 @@ namespace AF_mobile_web_api.Services
 
             // Client-side: format and sort
             var result = groupedData
-                .Select(x => new TimelinePriceDto
+                .Select(x => new TimelinePriceDTO
                 {
                     AddedDate = x.Date.ToString("dd-MM-yyyy"),
                     AvgPrice = x.AvgPrice,

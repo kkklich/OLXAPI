@@ -1,4 +1,4 @@
-﻿namespace AF_mobile_web_api.DTO
+﻿namespace AF_mobile_web_api.Domain
 {
     public class MarketplaceSearch
     {
