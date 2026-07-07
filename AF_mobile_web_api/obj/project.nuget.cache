@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "hSMmuwSY8Gw=",
+  "dgSpecHash": "5ice8XXenQs=",
   "success": true,
-  "projectFilePath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+  "projectFilePath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\kklic\\.nuget\\packages\\automapper\\12.0.0\\automapper.12.0.0.nupkg.sha512",
     "C:\\Users\\kklic\\.nuget\\packages\\automapper.extensions.microsoft.dependencyinjection\\12.0.0\\automapper.extensions.microsoft.dependencyinjection.12.0.0.nupkg.sha512",
@@ -65,10 +65,10 @@
     {
       "code": "NU1903",
       "level": "Warning",
-      "message": "Package 'AutoMapper' 12.0.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-rvv3-g6hj-g44x",
-      "projectPath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+      "message": "Pakiet „AutoMapper” 12.0.0 ma znane wysoka luki w zabezpieczeniach o ważności, https://github.com/advisories/GHSA-rvv3-g6hj-g44x",
+      "projectPath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
       "warningLevel": 1,
-      "filePath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+      "filePath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
       "libraryId": "AutoMapper",
       "targetGraphs": [
         "net10.0"
@@ -77,10 +77,10 @@
     {
       "code": "NU1902",
       "level": "Warning",
-      "message": "Package 'Azure.Identity' 1.10.3 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-m5vv-6r4h-3vj9",
-      "projectPath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+      "message": "Pakiet „Azure.Identity” 1.10.3 ma znane umiarkowana luki w zabezpieczeniach o ważności, https://github.com/advisories/GHSA-m5vv-6r4h-3vj9",
+      "projectPath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
       "warningLevel": 1,
-      "filePath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+      "filePath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
       "libraryId": "Azure.Identity",
       "targetGraphs": [
         "net10.0"
@@ -89,10 +89,10 @@
     {
       "code": "NU1902",
       "level": "Warning",
-      "message": "Package 'Azure.Identity' 1.10.3 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-wvxc-855f-jvrv",
-      "projectPath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+      "message": "Pakiet „Azure.Identity” 1.10.3 ma znane umiarkowana luki w zabezpieczeniach o ważności, https://github.com/advisories/GHSA-wvxc-855f-jvrv",
+      "projectPath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
       "warningLevel": 1,
-      "filePath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+      "filePath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
       "libraryId": "Azure.Identity",
       "targetGraphs": [
         "net10.0"
@@ -101,10 +101,10 @@
     {
       "code": "NU1902",
       "level": "Warning",
-      "message": "Package 'Microsoft.Identity.Client' 4.56.0 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-m5vv-6r4h-3vj9",
-      "projectPath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+      "message": "Pakiet „Microsoft.Identity.Client” 4.56.0 ma znane umiarkowana luki w zabezpieczeniach o ważności, https://github.com/advisories/GHSA-m5vv-6r4h-3vj9",
+      "projectPath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
       "warningLevel": 1,
-      "filePath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+      "filePath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
       "libraryId": "Microsoft.Identity.Client",
       "targetGraphs": [
         "net10.0"
@@ -113,10 +113,10 @@
     {
       "code": "NU1901",
       "level": "Warning",
-      "message": "Package 'Microsoft.Identity.Client' 4.56.0 has a known low severity vulnerability, https://github.com/advisories/GHSA-x674-v45j-fwxw",
-      "projectPath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+      "message": "Pakiet „Microsoft.Identity.Client” 4.56.0 ma znane niska luki w zabezpieczeniach o ważności, https://github.com/advisories/GHSA-x674-v45j-fwxw",
+      "projectPath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
       "warningLevel": 1,
-      "filePath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+      "filePath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
       "libraryId": "Microsoft.Identity.Client",
       "targetGraphs": [
         "net10.0"
@@ -125,10 +125,10 @@
     {
       "code": "NU1903",
       "level": "Warning",
-      "message": "Package 'Npgsql' 7.0.4 has a known high severity vulnerability, https://github.com/advisories/GHSA-x9vc-6hfv-hg8c",
-      "projectPath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+      "message": "Pakiet „Npgsql” 7.0.4 ma znane wysoka luki w zabezpieczeniach o ważności, https://github.com/advisories/GHSA-x9vc-6hfv-hg8c",
+      "projectPath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
       "warningLevel": 1,
-      "filePath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+      "filePath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
       "libraryId": "Npgsql",
       "targetGraphs": [
         "net10.0"
@@ -137,10 +137,10 @@
     {
       "code": "NU1701",
       "level": "Warning",
-      "message": "Package 'Microsoft.AspNet.Cors 5.3.0' was restored using '.NETFramework,Version=v4.6.1, .NETFramework,Version=v4.6.2, .NETFramework,Version=v4.7, .NETFramework,Version=v4.7.1, .NETFramework,Version=v4.7.2, .NETFramework,Version=v4.8, .NETFramework,Version=v4.8.1' instead of the project target framework 'net10.0'. This package may not be fully compatible with your project.",
-      "projectPath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+      "message": "Pakiet „Microsoft.AspNet.Cors 5.3.0” został przywrócony przy użyciu elementu „.NETFramework,Version=v4.6.1, .NETFramework,Version=v4.6.2, .NETFramework,Version=v4.7, .NETFramework,Version=v4.7.1, .NETFramework,Version=v4.7.2, .NETFramework,Version=v4.8, .NETFramework,Version=v4.8.1” zamiast platformy docelowej projektu „net10.0”. Ten pakiet może nie być w pełni kompatybilny z Twoim projektem.",
+      "projectPath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
       "warningLevel": 1,
-      "filePath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+      "filePath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
       "libraryId": "Microsoft.AspNet.Cors",
       "targetGraphs": [
         "net10.0"

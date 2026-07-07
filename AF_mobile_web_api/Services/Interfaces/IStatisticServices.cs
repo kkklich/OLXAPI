@@ -13,5 +13,8 @@ namespace AF_mobile_web_api.Services.Interfaces
           Func<SearchData, TKey> keySelector);
         Task<ChartData> GetBarChartData(string city, string groupedBy);
         Task<ChartData> FilterByParameter(string groupBy, string city, string parameter);
+        Task<MarketInsightsDTO> GetMarketInsights(string cityName);
+        Task<DashboardChartsDTO> GetDashboardCharts(string cityName);
+        Task<List<MapPointDTO>> GetMapPoints(string cityName);
     }
 }

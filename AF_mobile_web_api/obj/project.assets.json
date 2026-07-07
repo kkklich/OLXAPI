@@ -2391,11 +2391,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+      "projectUniqueName": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
       "projectName": "AF_mobile_web_api",
-      "projectPath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+      "projectPath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
       "packagesPath": "C:\\Users\\kklic\\.nuget\\packages\\",
-      "outputPath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\obj\\",
+      "outputPath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -2416,8 +2416,8 @@
         "net10.0": {
           "targetAlias": "net10.0",
           "projectReferences": {
-            "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj": {
-              "projectPath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj"
+            "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj": {
+              "projectPath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj"
             }
           }
         }
@@ -2941,7 +2941,7 @@
       "code": "NU1903",
       "level": "Warning",
       "warningLevel": 1,
-      "message": "Package 'AutoMapper' 12.0.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-rvv3-g6hj-g44x",
+      "message": "Pakiet „AutoMapper” 12.0.0 ma znane wysoka luki w zabezpieczeniach o ważności, https://github.com/advisories/GHSA-rvv3-g6hj-g44x",
       "libraryId": "AutoMapper",
       "targetGraphs": [
         "net10.0"
@@ -2951,7 +2951,7 @@
       "code": "NU1902",
       "level": "Warning",
       "warningLevel": 1,
-      "message": "Package 'Azure.Identity' 1.10.3 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-m5vv-6r4h-3vj9",
+      "message": "Pakiet „Azure.Identity” 1.10.3 ma znane umiarkowana luki w zabezpieczeniach o ważności, https://github.com/advisories/GHSA-m5vv-6r4h-3vj9",
       "libraryId": "Azure.Identity",
       "targetGraphs": [
         "net10.0"
@@ -2961,7 +2961,7 @@
       "code": "NU1902",
       "level": "Warning",
       "warningLevel": 1,
-      "message": "Package 'Azure.Identity' 1.10.3 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-wvxc-855f-jvrv",
+      "message": "Pakiet „Azure.Identity” 1.10.3 ma znane umiarkowana luki w zabezpieczeniach o ważności, https://github.com/advisories/GHSA-wvxc-855f-jvrv",
       "libraryId": "Azure.Identity",
       "targetGraphs": [
         "net10.0"
@@ -2971,7 +2971,7 @@
       "code": "NU1902",
       "level": "Warning",
       "warningLevel": 1,
-      "message": "Package 'Microsoft.Identity.Client' 4.56.0 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-m5vv-6r4h-3vj9",
+      "message": "Pakiet „Microsoft.Identity.Client” 4.56.0 ma znane umiarkowana luki w zabezpieczeniach o ważności, https://github.com/advisories/GHSA-m5vv-6r4h-3vj9",
       "libraryId": "Microsoft.Identity.Client",
       "targetGraphs": [
         "net10.0"
@@ -2981,7 +2981,7 @@
       "code": "NU1901",
       "level": "Warning",
       "warningLevel": 1,
-      "message": "Package 'Microsoft.Identity.Client' 4.56.0 has a known low severity vulnerability, https://github.com/advisories/GHSA-x674-v45j-fwxw",
+      "message": "Pakiet „Microsoft.Identity.Client” 4.56.0 ma znane niska luki w zabezpieczeniach o ważności, https://github.com/advisories/GHSA-x674-v45j-fwxw",
       "libraryId": "Microsoft.Identity.Client",
       "targetGraphs": [
         "net10.0"
@@ -2991,7 +2991,7 @@
       "code": "NU1903",
       "level": "Warning",
       "warningLevel": 1,
-      "message": "Package 'Npgsql' 7.0.4 has a known high severity vulnerability, https://github.com/advisories/GHSA-x9vc-6hfv-hg8c",
+      "message": "Pakiet „Npgsql” 7.0.4 ma znane wysoka luki w zabezpieczeniach o ważności, https://github.com/advisories/GHSA-x9vc-6hfv-hg8c",
       "libraryId": "Npgsql",
       "targetGraphs": [
         "net10.0"
@@ -3001,7 +3001,7 @@
       "code": "NU1701",
       "level": "Warning",
       "warningLevel": 1,
-      "message": "Package 'Microsoft.AspNet.Cors 5.3.0' was restored using '.NETFramework,Version=v4.6.1, .NETFramework,Version=v4.6.2, .NETFramework,Version=v4.7, .NETFramework,Version=v4.7.1, .NETFramework,Version=v4.7.2, .NETFramework,Version=v4.8, .NETFramework,Version=v4.8.1' instead of the project target framework 'net10.0'. This package may not be fully compatible with your project.",
+      "message": "Pakiet „Microsoft.AspNet.Cors 5.3.0” został przywrócony przy użyciu elementu „.NETFramework,Version=v4.6.1, .NETFramework,Version=v4.6.2, .NETFramework,Version=v4.7, .NETFramework,Version=v4.7.1, .NETFramework,Version=v4.7.2, .NETFramework,Version=v4.8, .NETFramework,Version=v4.8.1” zamiast platformy docelowej projektu „net10.0”. Ten pakiet może nie być w pełni kompatybilny z Twoim projektem.",
       "libraryId": "Microsoft.AspNet.Cors",
       "targetGraphs": [
         "net10.0"

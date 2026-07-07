@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj": {}
+    "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj": {}
   },
   "projects": {
-    "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj": {
+    "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+        "projectUniqueName": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
         "projectName": "AF_mobile_web_api",
-        "projectPath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
+        "projectPath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\AF_mobile_web_api.csproj",
         "packagesPath": "C:\\Users\\kklic\\.nuget\\packages\\",
-        "outputPath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\AF_mobile_web_api\\obj\\",
+        "outputPath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\AF_mobile_web_api\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -32,8 +32,8 @@
           "net10.0": {
             "targetAlias": "net10.0",
             "projectReferences": {
-              "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj": {
-                "projectPath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj"
+              "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj": {
+                "projectPath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj"
               }
             }
           }
@@ -552,14 +552,14 @@
         }
       }
     },
-    "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj": {
+    "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj",
+        "projectUniqueName": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj",
         "projectName": "ApplicationDatabase",
-        "projectPath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj",
+        "projectPath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\ApplicationDatabase\\ApplicationDatabase.csproj",
         "packagesPath": "C:\\Users\\kklic\\.nuget\\packages\\",
-        "outputPath": "D:\\Dokumenty\\Praca\\repos\\OLXAPI\\ApplicationDatabase\\obj\\",
+        "outputPath": "D:\\Dokumenty\\Praca\\repos\\realEstateApp\\OLXAPI\\ApplicationDatabase\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
