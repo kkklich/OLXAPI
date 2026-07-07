@@ -1,5 +1,5 @@
 # ---------- BUILD STAGE ----------
-FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy solution and project files
@@ -18,7 +18,7 @@ WORKDIR /src/AF_mobile_web_api
 RUN dotnet publish -c Release -o /app/publish
 
 # ---------- RUNTIME STAGE ----------
-FROM mcr.microsoft.com/dotnet/aspnet:7.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
 # Copy published output from build stage
