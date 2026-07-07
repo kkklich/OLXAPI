@@ -1,16 +1,17 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using AF_mobile_web_api.Services;
+using AF_mobile_web_api.Services.Interfaces;
 
 namespace AF_mobile_web_api.Controllers
-{ 
+{
+    [ApiController]
     [Route("api/[controller]")]
     public class RealEstateController : ControllerBase
     {
-        private readonly RealEstateServices _realEstate;
-        private readonly StatisticServices _statisticServices;
-        private readonly MorizonApiService _morizonApiService;
-        private readonly NieruchomosciOnlineService _nieruchomosciOnlineService;
-        public RealEstateController(RealEstateServices realEstate, StatisticServices statisticServices, MorizonApiService morizonApiService, NieruchomosciOnlineService nieruchomosciOnlineService)
+        private readonly IRealEstateServices _realEstate;
+        private readonly IStatisticServices _statisticServices;
+        private readonly IMorizonApiService _morizonApiService;
+        private readonly INieruchomosciOnlineService _nieruchomosciOnlineService;
+        public RealEstateController(IRealEstateServices realEstate, IStatisticServices statisticServices, IMorizonApiService morizonApiService, INieruchomosciOnlineService nieruchomosciOnlineService)
         {
             _realEstate = realEstate;
             _statisticServices = statisticServices;
@@ -18,162 +19,103 @@ namespace AF_mobile_web_api.Controllers
             _nieruchomosciOnlineService = nieruchomosciOnlineService;
         }
 
-        [HttpGet("getNieruchomosciOnlineAPI")]
+        [HttpGet("nieruchomosciOnline")]
         public async Task<IActionResult> getNieruchomosciOnlineAPI()
         {
-            try
-            {
-                var result = await _nieruchomosciOnlineService.GetAllPagesAsync();
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            var result = await _nieruchomosciOnlineService.GetAllPagesAsync();
+            return Ok(result);           
         }
         
-        [HttpGet("getMorizonAPI")]
+        [HttpGet("morizon")]
         public async Task<IActionResult> getMorizonAPI()
         {
-            try
-            {
-                var result = await _morizonApiService.GetPropertyListingDataAsync();
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            var result = await _morizonApiService.GetPropertyListingDataAsync();
+            return Ok(result);           
         }
 
         [HttpGet("loadDataMarkeplaces")]
         public async Task<IActionResult> LoadDataMarkeplaces()
         {
-            try
-            {
-                var result = await _realEstate.LoadDataMarkeplaces();
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            var result = await _realEstate.LoadDataMarkeplacesAsync();
+            return Ok(result);            
         }
         
         [HttpGet("getdataForManyCities")]
         public async Task<IActionResult> GetdataForManyCities()
         {
-            try
-            {
-                var result = await _realEstate.GetdataForManyCities();
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            var result = await _realEstate.GetdataForManyCitiesAsync();
+            return Ok(result);          
         }
         
         [HttpGet("getRealEstate/{city}")]
         public async Task<IActionResult> GetDefaultRealEstate(string city  = "Krakow")
         {
-            try
-            {
-                var result = await _realEstate.GetData(city);
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            var result = await _realEstate.GetDataAsync(city);
+            return Ok(result);            
         }
-        
-        
+                
         [HttpGet("getUniqueOffers")]
         public async Task<IActionResult> getUniqueOffers()
         {
-            try
-            {
-                var result = await _realEstate.GetUniqueOfferts();
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            var result = await _realEstate.GetUniqueOffertsAsync();
+            return Ok(result);         
         }
-        
-        
+                
         [HttpGet("RealEstateStats")]
         public async Task<IActionResult> GetRealEstateStats()
         {
-            try
-            {
-                var result = await _statisticServices.GetDataWithStatistics();
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            var result = await _statisticServices.GetDataWithStatistics();
+            return Ok(result);         
         }
         
         [HttpGet("RealEstateGropuBy")]
         public async Task<IActionResult> RealEstateGropuBy([FromQuery] string groupBy)
         {
-            try
-            {
-                var result = await _statisticServices.GetDataWithGroupStatistics(groupBy);
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            var result = await _statisticServices.GetDataWithGroupStatistics(groupBy);
+            return Ok(result);            
         }
         
         
         [HttpGet("getTimelinePrice/{city}")]
         public async Task<IActionResult> GetTimelinePrice(string city)
         {
-            try
-            {
-                var result = await _statisticServices.GetTimelinePrice(city);
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            var result = await _statisticServices.GetTimelinePrice(city);
+            return Ok(result);            
         }
 
         [HttpGet("getGroupedStatistics/{groupBy}/{city}")]
         public async Task<IActionResult> getGroupedStatistics(string groupBy, string city)
         {
-            try
-            {
-                var result = await _statisticServices.GetBarChartData(city, groupBy);
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            var result = await _statisticServices.GetBarChartData(city, groupBy);
+            return Ok(result);         
+        }
+
+        [HttpGet("getDashboardCharts/{city}")]
+        public async Task<IActionResult> GetDashboardCharts(string city)
+        {
+            var result = await _statisticServices.GetDashboardCharts(city);
+            return Ok(result);
+        }
+
+        [HttpGet("getMarketInsights/{city}")]
+        public async Task<IActionResult> GetMarketInsights(string city)
+        {
+            var result = await _statisticServices.GetMarketInsights(city);
+            return Ok(result);
+        }
+
+        [HttpGet("getMapPoints/{city}")]
+        public async Task<IActionResult> GetMapPoints(string city)
+        {
+            var result = await _statisticServices.GetMapPoints(city);
+            return Ok(result);
         }
 
         [HttpGet("filterByParameter/{groupBy}/{city}/{parameter}")]
         public async Task<IActionResult> FilterByParameter(string groupBy,  string city,  string parameter)
         {
-            try
-            {
-                var chart = await _statisticServices.FilterByParameter(groupBy, city, parameter);
-                return Ok(chart);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            var chart = await _statisticServices.FilterByParameter(groupBy, city, parameter);
+            return Ok(chart);            
         }
-
     }
 }
