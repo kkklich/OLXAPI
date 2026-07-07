@@ -1,8 +1,8 @@
-﻿namespace AF_mobile_web_api.DTO
+namespace AF_mobile_web_api.Domain
 {
-    public class TimelinePriceDTO
+    public class TimelineGroup
     {
-        public string AddedDate { get; set; } = string.Empty;
+        public DateTime Date { get; set; }
         public double AvgPrice { get; set; }
         public double AvgPricePerMeter { get; set; }
         public int Count { get; set; }

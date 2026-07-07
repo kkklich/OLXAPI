@@ -1,9 +1,13 @@
-using System;
-using System.Reflection;
 using AF_mobile_web_api.Mappings;
+using AF_mobile_web_api.Middleware;
+using AF_mobile_web_api.Repositories;
+using AF_mobile_web_api.Repositories.Interfaces;
 using AF_mobile_web_api.Services;
+using AF_mobile_web_api.Services.Interfaces;
 using ApplicationDatabase;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,16 +22,23 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     ));
 builder.Services.AddAutoMapper(typeof(MappingProfile));
 
-// Add services to the container.
-builder.Services
-    .AddScoped<HTTPClientServices>()
-    .AddScoped<RealEstateServices>()
-    .AddScoped<StatisticServices>()
-    .AddScoped<MorizonApiService>()
-    .AddScoped<OLXAPIService>()
-    .AddScoped<NieruchomosciOnlineService>();   
 
-builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient(); // Still needed for the factory!
+builder.Services.AddTransient<IHTTPClientServices, HTTPClientServices>();
+
+builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+
+builder.Services.AddScoped<IPropertyDataRepository, PropertyDataRepository>();
+builder.Services.AddScoped<IRealEstateRepository, RealEstateRepository>();
+
+builder.Services.AddScoped<IOLXAPIService, OLXAPIService>();
+builder.Services.AddScoped<INieruchomosciOnlineService, NieruchomosciOnlineService>();
+builder.Services.AddScoped<IMorizonApiService, MorizonApiService>();
+builder.Services.AddScoped<IRealEstateServices, RealEstateServices>();
+builder.Services.AddScoped<IStatisticServices, StatisticServices>();
+
+
+builder.Services.AddMemoryCache();//TODO add redis cache for better performance and scalability
 
 builder.Services.AddControllers();  
 
@@ -38,23 +49,22 @@ builder.Logging.AddDebug();
 builder.Logging.AddEventSourceLogger();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
+
+var allowedFrontendUrl = builder.Configuration["AllowedOrigins:Frontend"]
+                         ?? "http://localhost:4200";
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowSpecificOrigin",
         builder => builder
-            .AllowAnyOrigin()
+            .WithOrigins(allowedFrontendUrl)
             .AllowAnyMethod()
             .AllowAnyHeader());
 });
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    //app.UseSwagger();
-    //app.UseSwaggerUI();
-}
+app.UseMiddleware<ExceptionMiddleware>();
 
 app.UseCors("AllowSpecificOrigin");
 

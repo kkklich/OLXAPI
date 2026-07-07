@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace AF_mobile_web_api.DTO;
+namespace AF_mobile_web_api.Domain;
 
 
 public class RecordProps

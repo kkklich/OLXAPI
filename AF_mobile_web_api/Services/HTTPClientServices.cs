@@ -3,217 +3,93 @@ using System.Text;
 
 namespace AF_mobile_web_api.Services
 {
-    public class HTTPClientServices
+    public class HTTPClientServices : IHTTPClientServices
     {
+        private readonly IHttpClientFactory _httpClientFactory;
+
+        public HTTPClientServices(IHttpClientFactory httpClientFactory)
+        {
+            _httpClientFactory = httpClientFactory;
+        }
 
         public async Task<TOutput> Get<TOutput>(string url, bool withToken = true, double? timeoutInSeconds = null)
-          where TOutput : class
+            where TOutput : class
         {
-            try
-            {
-                using var client = new System.Net.Http.HttpClient();
-                var request = new HttpRequestMessage
-                {
-                    RequestUri = new Uri(url),
-                    Method = HttpMethod.Get
-                };
+            var client = _httpClientFactory.CreateClient();
+            if (timeoutInSeconds.HasValue) client.Timeout = TimeSpan.FromSeconds(timeoutInSeconds.Value);
 
-                var resp = await client.SendAsync(request);
-                if (!resp.IsSuccessStatusCode)
-                {
-                    var errorMessage = $"Error while calling : {url}, response StatusCode = {resp.StatusCode}.";
-                    var content = await resp.Content?.ReadAsStringAsync();
-                    if (content != null) throw new HttpRequestException(errorMessage, new Exception(content));
-                    throw new HttpRequestException(errorMessage);
-                }
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            var resp = await client.SendAsync(request);
 
-                var result = await resp.Content.ReadAsStringAsync();
-                return JsonConvert.DeserializeObject<TOutput>(result);
-            }
-            catch (Exception e)
-            {
-                throw;
-            }
+            return await HandleResponse<TOutput>(resp, url);
         }
 
         public async Task<HttpResponseMessage> GetRaw(string url, double? timeoutInSeconds = null, IDictionary<string, string>? headers = null)
         {
-            try
+            var client = _httpClientFactory.CreateClient();
+            if (timeoutInSeconds.HasValue) client.Timeout = TimeSpan.FromSeconds(timeoutInSeconds.Value);
+
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+
+            if (headers is { Count: > 0 })
             {
-                using var client = new System.Net.Http.HttpClient();
-                var request = new HttpRequestMessage
+                foreach (var kv in headers)
                 {
-                    RequestUri = new Uri(url),
-                    Method = HttpMethod.Get
-                };
-
-
-                if (headers is { Count: > 0 })
-                {
-                    foreach (var kv in headers)
-                    {                      
-                        request.Headers.Remove(kv.Key);
-                        request.Headers.TryAddWithoutValidation(kv.Key, kv.Value);                        
-                    }
+                    request.Headers.TryAddWithoutValidation(kv.Key, kv.Value);
                 }
-
-                var resp = await client.SendAsync(request);
-                if (!resp.IsSuccessStatusCode)
-                {
-                    var errorMessage = $"Error while calling : {url}, response StatusCode = {resp.StatusCode}.";
-                    var content = await resp.Content?.ReadAsStringAsync();
-                    if (content != null) throw new HttpRequestException(errorMessage, new Exception(content));
-                    throw new HttpRequestException(errorMessage);
-                }
-
-                return resp;
             }
-            catch (Exception e)
+
+            var resp = await client.SendAsync(request);
+            if (!resp.IsSuccessStatusCode)
             {
-                throw;
+                await EnsureSuccess(resp, url);
             }
+
+            return resp;
         }
-
-        public async Task<TOutput> PostAsync2<TInput, TOutput>(string url, TInput inputData, bool withToken = true, double? timeoutInSeconds = null)
-           where TInput : class
-           where TOutput : class
-        {
-            try
-            {
-                using var client = new System.Net.Http.HttpClient();
-
-                if (timeoutInSeconds.HasValue)
-                {
-                    client.Timeout = TimeSpan.FromSeconds(timeoutInSeconds.Value);
-                }
-
-                // Serialize input data to JSON
-                var jsonData = JsonConvert.SerializeObject(inputData);
-                var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-
-                var request = new HttpRequestMessage
-                {
-                    RequestUri = new Uri(url),
-                    Method = HttpMethod.Post,
-                    Content = content
-                };
-
-                // Add common headers
-                request.Headers.Add("Accept", "application/json");
-
-                // Add User-Agent header similar to browsers
-                request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-
-                var resp = await client.SendAsync(request);
-                if (!resp.IsSuccessStatusCode)
-                {
-                    var errorMessage = $"Error while calling : {url}, response StatusCode = {resp.StatusCode}.";
-                    var errorContent = await resp.Content?.ReadAsStringAsync();
-                    if (errorContent != null) throw new HttpRequestException(errorMessage, new Exception(errorContent));
-                    throw new HttpRequestException(errorMessage);
-                }
-
-                var result = await resp.Content.ReadAsStringAsync();
-                return JsonConvert.DeserializeObject<TOutput>(result);
-            }
-            catch (Exception e)
-            {
-                throw;
-            }
-        }
-
 
         public async Task<TOutput> PostAsync<TInput, TOutput>(string url, TInput inputData, bool withToken = true, double? timeoutInSeconds = null)
-           where TInput : class
-           where TOutput : class
+            where TInput : class
+            where TOutput : class
         {
-            try
-            {
-                using var client = new System.Net.Http.HttpClient();
-
-                if (timeoutInSeconds.HasValue)
-                {
-                    client.Timeout = TimeSpan.FromSeconds(timeoutInSeconds.Value);
-                }
-
-                // Serialize input data to JSON
-                var jsonData = JsonConvert.SerializeObject(inputData);
-                var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-
-                var request = new HttpRequestMessage
-                {
-                    RequestUri = new Uri(url),
-                    Method = HttpMethod.Post,
-                    Content = content
-                };
-
-                // Add common headers
-                request.Headers.Add("Accept", "application/json");
-
-                // Add User-Agent header similar to browsers
-                request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-
-                var resp = await client.SendAsync(request);
-                if (!resp.IsSuccessStatusCode)
-                {
-                    var errorMessage = $"Error while calling : {url}, response StatusCode = {resp.StatusCode}.";
-                    var errorContent = await resp.Content?.ReadAsStringAsync();
-                    if (errorContent != null) throw new HttpRequestException(errorMessage, new Exception(errorContent));
-                    throw new HttpRequestException(errorMessage);
-                }
-
-                var result = await resp.Content.ReadAsStringAsync();
-                return JsonConvert.DeserializeObject<TOutput>(result);
-            }
-            catch (Exception e)
-            {
-                throw;
-            }
+            var jsonData = JsonConvert.SerializeObject(inputData);
+            return await PostAsync<TOutput>(url, jsonData, withToken, timeoutInSeconds);
         }
 
         public async Task<TOutput> PostAsync<TOutput>(string url, string jsonData, bool withToken = true, double? timeoutInSeconds = null)
             where TOutput : class
         {
-            try
+            var client = _httpClientFactory.CreateClient();
+            if (timeoutInSeconds.HasValue) client.Timeout = TimeSpan.FromSeconds(timeoutInSeconds.Value);
+
+            var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+            var request = new HttpRequestMessage(HttpMethod.Post, url)
             {
-                using var client = new System.Net.Http.HttpClient();
+                Content = content
+            };
 
-                if (timeoutInSeconds.HasValue)
-                {
-                    client.Timeout = TimeSpan.FromSeconds(timeoutInSeconds.Value);
-                }
+            request.Headers.Add("Accept", "application/json");
+            request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) HttpClientServices/1.0");
 
-                var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-
-                var request = new HttpRequestMessage
-                {
-                    RequestUri = new Uri(url),
-                    Method = HttpMethod.Post,
-                    Content = content
-                };
-
-                // Add common headers
-                request.Headers.Add("Accept", "application/json");
-                request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-
-                var resp = await client.SendAsync(request);
-                if (!resp.IsSuccessStatusCode)
-                {
-                    var errorMessage = $"Error while calling : {url}, response StatusCode = {resp.StatusCode}.";
-                    var errorContent = await resp.Content?.ReadAsStringAsync();
-                    if (errorContent != null) throw new HttpRequestException(errorMessage, new Exception(errorContent));
-                    throw new HttpRequestException(errorMessage);
-                }
-
-                var result = await resp.Content.ReadAsStringAsync();
-                return JsonConvert.DeserializeObject<TOutput>(result);
-            }
-            catch (Exception e)
-            {
-                throw;
-            }
+            var resp = await client.SendAsync(request);
+            return await HandleResponse<TOutput>(resp, url);
         }
 
+        private async Task<TOutput> HandleResponse<TOutput>(HttpResponseMessage resp, string url) where TOutput : class
+        {
+            await EnsureSuccess(resp, url);
+            var result = await resp.Content.ReadAsStringAsync();
+            return JsonConvert.DeserializeObject<TOutput>(result);
+        }
 
+        private async Task EnsureSuccess(HttpResponseMessage resp, string url)
+        {
+            if (!resp.IsSuccessStatusCode)
+            {
+                var content = await resp.Content.ReadAsStringAsync();
+                var errorMessage = $"Error while calling : {url}, response StatusCode = {resp.StatusCode}. Content: {content}";
+                throw new HttpRequestException(errorMessage);
+            }
+        }
     }
 }

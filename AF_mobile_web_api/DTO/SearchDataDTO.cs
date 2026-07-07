@@ -1,4 +1,6 @@
-﻿namespace AF_mobile_web_api.DTO
+﻿using AF_mobile_web_api.Domain;
+
+namespace AF_mobile_web_api.DTO
 {
     public class SearchDataDTO
     {

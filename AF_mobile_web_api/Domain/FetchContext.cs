@@ -1,4 +1,4 @@
-﻿namespace AF_mobile_web_api.DTO
+﻿namespace AF_mobile_web_api.Domain
 {
     public enum MarketKind { Pierwotny = 1, Wtórny = 2 }
     public enum BuildingType { Blok = 1, Apartamentowiec = 2, Kamienica = 3 }

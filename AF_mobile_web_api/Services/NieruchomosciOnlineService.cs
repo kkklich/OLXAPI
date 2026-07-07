@@ -1,18 +1,20 @@
-﻿using AF_mobile_web_api.DTO;
+﻿using AF_mobile_web_api.Domain;
 using AF_mobile_web_api.DTO.Enums;
-using Newtonsoft.Json.Linq;
+using AF_mobile_web_api.Services.Interfaces;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace AF_mobile_web_api.Services
 {
-    public class NieruchomosciOnlineService
+    public class NieruchomosciOnlineService: INieruchomosciOnlineService
     {
-        private readonly HTTPClientServices _httpClient;
-
-        public NieruchomosciOnlineService(HTTPClientServices httpClient)
+        private readonly JsonSerializerOptions Options = new()
+        {
+            PropertyNameCaseInsensitive = true
+        };
+        private readonly IHTTPClientServices _httpClient;
+        public NieruchomosciOnlineService(IHTTPClientServices httpClient)
         {
             _httpClient = httpClient;
         }
@@ -57,32 +59,6 @@ namespace AF_mobile_web_api.Services
             return searchedData;
         }
 
-
-        public async Task<MarketplaceSearch> GetAllPagesAsync2()
-        {
-            var results = new List<SearchData>();
-            int maxPages = 200;
-            string baseUrl = "https://krakow.nieruchomosci-online.pl/mieszkania,sprzedaz/?p=";
-
-            for (int page = 1; page <= maxPages; page++)
-            {
-                string url = $"{baseUrl}{page}";
-                var response = await GetApartmentListingsAsync(url);             
-                results.AddRange(response);
-
-                await Task.Delay(1);
-            }
-
-            MarketplaceSearch searchedData = new MarketplaceSearch()
-            {
-                Data = results,
-                TotalCount = results.Count
-            };
-            
-            return searchedData;
-        }
-
-
         public async Task<List<SearchData>> GetApartmentListingsAsync(string url)
         {
             var headers = new Dictionary<string, string>
@@ -110,39 +86,7 @@ namespace AF_mobile_web_api.Services
                 return null; // Or handle the error appropriately
             }
         }
-
-
-        private readonly JsonSerializerOptions Options = new()
-        {
-            PropertyNameCaseInsensitive = true
-        };
-
-        private int? GetFloor(JToken attributesToken)
-        {
-            if (attributesToken == null || attributesToken.Type != JTokenType.Array)
-                return null;
-
-            var floorAttr = attributesToken
-                .FirstOrDefault(a =>
-                    string.Equals((string)a["alias"], "floor", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals((string)a["label"], "Piętro", StringComparison.OrdinalIgnoreCase));
-            if (floorAttr == null)
-                return null;
-
-            var values = floorAttr["values"] as JArray;
-            if (values == null)
-                return null;
-
-            // Pick the first numeric value; the array often looks like ["1","/","2"], where first is current floor.
-            foreach (var v in values)
-            {
-                var valStr = (string)v["value"];
-                if (int.TryParse(valStr, out var num))
-                    return num;
-            }
-            return null;
-        }
-
+                
         private List<AdditionalData> ParseListAdditionalData(string json)
         {
             using var doc = JsonDocument.Parse(json);
@@ -168,7 +112,6 @@ namespace AF_mobile_web_api.Services
             return result;
         }
 
-        //record_props
         private List<RecordProps> ParseListRecordPropsData(string json)
         {
             json = json.Replace("record_props", "recordprops");
@@ -239,7 +182,7 @@ namespace AF_mobile_web_api.Services
                 },
                 Description = a?.MetaTitle ?? "",
                 Floor = a.Floor,
-                Photos = new List<Photos>(), //todo get from photos json,
+                Photos = new List<Photos>(),
                 BuildingType = buildingType
             };
             
