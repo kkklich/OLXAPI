@@ -1,4 +1,5 @@
-﻿using AF_mobile_web_api.Repositories.Interfaces;
+﻿using AF_mobile_web_api.Domain;
+using AF_mobile_web_api.Repositories.Interfaces;
 using ApplicationDatabase;
 using ApplicationDatabase.Models;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +18,22 @@ namespace AF_mobile_web_api.Repositories
         {
             return await _dbSet
                 .Where(p => p.City == city.ToString())
+                .ToListAsync();
+        }
+
+        public async Task<List<TimelineGroup>> GetTimelineByCityAsync(string city)
+        {
+            return await _dbSet
+                .Where(p => p.City == city)
+                .GroupBy(p => p.AddedRecordTime.Date)
+                .Select(g => new TimelineGroup
+                {
+                    Date = g.Key,
+                    AvgPrice = g.Average(x => x.Price),
+                    AvgPricePerMeter = g.Average(x => x.PricePerMeter),
+                    Count = g.Count()
+                })
+                .OrderBy(x => x.Date)
                 .ToListAsync();
         }
 

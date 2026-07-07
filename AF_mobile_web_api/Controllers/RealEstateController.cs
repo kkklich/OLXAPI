@@ -90,6 +90,27 @@ namespace AF_mobile_web_api.Controllers
             return Ok(result);         
         }
 
+        [HttpGet("getDashboardCharts/{city}")]
+        public async Task<IActionResult> GetDashboardCharts(string city)
+        {
+            var result = await _statisticServices.GetDashboardCharts(city);
+            return Ok(result);
+        }
+
+        [HttpGet("getMarketInsights/{city}")]
+        public async Task<IActionResult> GetMarketInsights(string city)
+        {
+            var result = await _statisticServices.GetMarketInsights(city);
+            return Ok(result);
+        }
+
+        [HttpGet("getMapPoints/{city}")]
+        public async Task<IActionResult> GetMapPoints(string city)
+        {
+            var result = await _statisticServices.GetMapPoints(city);
+            return Ok(result);
+        }
+
         [HttpGet("filterByParameter/{groupBy}/{city}/{parameter}")]
         public async Task<IActionResult> FilterByParameter(string groupBy,  string city,  string parameter)
         {
