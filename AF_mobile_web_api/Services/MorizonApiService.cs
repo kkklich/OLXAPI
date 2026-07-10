@@ -193,21 +193,6 @@ namespace AF_mobile_web_api.Services
                 searchData.Url = "https://www.morizon.pl" + property["url"]?.Value<string>();
                 searchData.Title = property["title"]?.Value<string>() ?? property["advertisementText"]?.Value<string>();
 
-                // Parse creation date
-                var addedAtString = property["addedAt"]?.Value<string>();
-                if (!string.IsNullOrEmpty(addedAtString))
-                {
-                    if (DateTime.TryParseExact(addedAtString, "yyyy-MM-dd", CultureInfo.InvariantCulture,
-                        DateTimeStyles.None, out var parsedDate))
-                    {
-                        searchData.CreatedTime = parsedDate;
-                    }
-                    else if (DateTime.TryParse(addedAtString, out parsedDate))
-                    {
-                        searchData.CreatedTime = parsedDate;
-                    }
-                }
-
                 // Price information
                 var priceElement = property["price"];
                 if (priceElement != null)
@@ -240,17 +225,12 @@ namespace AF_mobile_web_api.Services
                     searchData.Area = area;
                 }
 
-                // Description
-                searchData.Description = property["description"]?.Value<string>();         
-
                 // Private property indicator
                 searchData.Private = DetermineIfPrivate(property["contact"]);
 
                 // Location information with coordinates
                 searchData.Location = ExtractLocationData(property);
 
-                // Photos with enhanced information
-                searchData.Photos = ExtractPhotosData(property, searchData.Id);
                 searchData.WebName = WebName.Morizon;
 
                 return searchData;
@@ -287,10 +267,6 @@ namespace AF_mobile_web_api.Services
                     }
                 }
 
-                // Extract street and number directly from the API response
-                location.Street = locationElement["street"]?.Value<string>();
-                location.Number = locationElement["number"]?.Value<string>();
-
                 // Extract location array for city/district
                 var locationArray = locationElement["location"];
                 if (locationArray != null && locationArray.Type == JTokenType.Array)
@@ -306,75 +282,6 @@ namespace AF_mobile_web_api.Services
             }
 
             return location;
-        }
-
-        private List<Photos> ExtractPhotosData(JToken property, string propertyId)
-        {
-            var photos = new List<Photos>();
-
-            var photosElement = property["photos"];
-            var longId = long.Parse(propertyId);
-            if (photosElement != null && photosElement.Type == JTokenType.Array)
-            {
-                foreach (var photo in photosElement)
-                {
-                    var photoObj = new Photos();
-
-                    // Extract photo ID
-                    var photoIdString = photo["id"]?.Value<string>();
-                    if (long.TryParse(photoIdString, out var photoId))
-                    {
-                        photoObj.Id = photoId;
-                    }
-
-                    // Extract filename from name
-                    photoObj.Filename = photo["name"]?.Value<string>() ?? $"property_{propertyId}_{photoObj.Id}.jpg";
-
-                    // Extract dimensions
-                    var widthString = photo["width"]?.Value<string>();
-                    if (int.TryParse(widthString, out var width))
-                    {
-                        photoObj.Width = width;
-                    }
-
-                    var heightString = photo["height"]?.Value<string>();
-                    if (int.TryParse(heightString, out var height))
-                    {
-                        photoObj.Height = height;
-                    }
-
-                    // Construct photo URL
-                    photoObj.Link = ConstructPhotoUrl(photoObj.Filename, photoObj.Id, longId);
-
-                    photos.Add(photoObj);
-                }
-            }
-            else
-            {
-                var photosNumber = property["photosNumber"]?.Value<int>() ?? 0;
-                if (photosNumber > 0)
-                {
-                    // If no photos array but photosNumber exists, create placeholder photos
-                    for (int i = 1; i <= photosNumber; i++)
-                    {                      
-                        photos.Add(new Photos
-                        {
-                            Id = longId * 1000 + i,
-                            Filename = $"property_{propertyId}_{i}.jpg",
-                            Width = 800,
-                            Height = 600,
-                            Link = ConstructPhotoUrl($"property_{propertyId}_{i}.jpg", longId * 1000 + i, longId)
-                        });
-                    }
-                }
-            }
-
-            return photos;
-        }
-
-        private string ConstructPhotoUrl(string filename, long photoId, long propertyId)
-        {
-            return $"{ConstantHelper.BasePhotoUrl}800x600/{photoId}/{filename}";
         }
 
         private int ExtractFloorNumber(string floorFormatted)

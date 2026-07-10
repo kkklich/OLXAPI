@@ -111,6 +111,13 @@ namespace AF_mobile_web_api.Controllers
             return Ok(result);
         }
 
+        [HttpGet("getFullDashboard/{city}")]
+        public async Task<IActionResult> GetFullDashboard(string city)
+        {
+            var result = await _statisticServices.GetFullDashboardDataAsync(city);
+            return Ok(result);
+        }
+
         [HttpGet("filterByParameter/{groupBy}/{city}/{parameter}")]
         public async Task<IActionResult> FilterByParameter(string groupBy,  string city,  string parameter)
         {

@@ -29,7 +29,6 @@ builder.Services.AddTransient<IHTTPClientServices, HTTPClientServices>();
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
 builder.Services.AddScoped<IPropertyDataRepository, PropertyDataRepository>();
-builder.Services.AddScoped<IRealEstateRepository, RealEstateRepository>();
 
 builder.Services.AddScoped<IOLXAPIService, OLXAPIService>();
 builder.Services.AddScoped<INieruchomosciOnlineService, NieruchomosciOnlineService>();
@@ -39,6 +38,14 @@ builder.Services.AddScoped<IStatisticServices, StatisticServices>();
 
 
 builder.Services.AddMemoryCache();//TODO add redis cache for better performance and scalability
+
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    // Brotli first: better ratio than gzip, supported by every modern browser
+    options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProvider>();
+    options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProvider>();
+});
 
 builder.Services.AddControllers();  
 
@@ -63,6 +70,8 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+app.UseResponseCompression();
 
 app.UseMiddleware<ExceptionMiddleware>();
 

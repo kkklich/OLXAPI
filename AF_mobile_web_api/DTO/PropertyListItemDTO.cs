@@ -1,12 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace ApplicationDatabase.Models
+namespace AF_mobile_web_api.DTO
 {
-    public class PropertyData
+    // One row of the paginated /properties list: the newest snapshot of an offer
+    // plus history metadata aggregated over every weekly snapshot with the same Url.
+    public class PropertyListItemDTO
     {
         public Guid Id { get; set; }
         public string Url { get; set; }
@@ -21,11 +17,11 @@ namespace ApplicationDatabase.Models
         public int WebName { get; set; }
         public string City { get; set; }
         public string District { get; set; }
-        public double Lat { get; set; }
-        public double Lon { get; set; }
 
-        // Single timestamp shared by every row of one scrape - acts as the batch marker.
-        // Snapshot charts read the latest batch; the timeline groups all batches by day.
-        public DateTime AddedRecordTime { get; set; }
+        public DateTime FirstSeen { get; set; }
+        public DateTime LastSeen { get; set; }
+        public int SnapshotCount { get; set; }
+        public double FirstPrice { get; set; }
+        public double PriceChange => Price - FirstPrice;
     }
 }

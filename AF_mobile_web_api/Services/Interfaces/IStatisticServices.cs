@@ -16,5 +16,6 @@ namespace AF_mobile_web_api.Services.Interfaces
         Task<MarketInsightsDTO> GetMarketInsights(string cityName);
         Task<DashboardChartsDTO> GetDashboardCharts(string cityName);
         Task<List<MapPointDTO>> GetMapPoints(string cityName);
+        Task<FullDashboardDTO> GetFullDashboardDataAsync(string cityName);
     }
 }

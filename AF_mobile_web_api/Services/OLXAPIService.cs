@@ -153,9 +153,7 @@ namespace AF_mobile_web_api.Services
             record.Id = data.Id;
             record.Url = data.Url;
             record.Title = data.Title;
-            record.CreatedTime = data.created_time;
             record.Private = !data.Business;
-            record.Description = data.Description;
             record.Location = new LocationPlace()
             {
                 City = data?.Location?.City?.Name ?? string.Empty,
