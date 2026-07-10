@@ -14,6 +14,7 @@ namespace AF_mobile_web_api.DTO
         public double Area { get; set; }
         public bool Private { get; set; }
         public MapLocationDTO Location { get; set; } = new();
+        public string Color { get; set; } = string.Empty;
     }
 
     public class MapLocationDTO

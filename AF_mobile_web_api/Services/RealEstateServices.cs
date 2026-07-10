@@ -7,7 +7,6 @@ using ApplicationDatabase;
 using ApplicationDatabase.Models;
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
-using Newtonsoft.Json;
 
 namespace AF_mobile_web_api.Services
 {
@@ -17,40 +16,32 @@ namespace AF_mobile_web_api.Services
         private readonly IMorizonApiService _morizonApiService;
         private readonly INieruchomosciOnlineService _nieruchomosciOnlineService;
         private readonly IMapper _mapper;
-        private readonly IRealEstateRepository _realEstateRepository;
         private readonly IPropertyDataRepository _propertyDataRepository;
 
         public RealEstateServices(
             IOLXAPIService olxApiService,
-            IMorizonApiService morizonApiService, 
+            IMorizonApiService morizonApiService,
             INieruchomosciOnlineService nieruchomosciOnlineService,
             IMapper mapper,
-            IRealEstateRepository realEstateRepository,
-            IPropertyDataRepository propertyDataRepository)            
+            IPropertyDataRepository propertyDataRepository)
         {
             _olxApiService = olxApiService;
             _morizonApiService = morizonApiService;
             _nieruchomosciOnlineService = nieruchomosciOnlineService;
             _mapper = mapper;
-            _realEstateRepository = realEstateRepository;
             _propertyDataRepository = propertyDataRepository;
-        }        
+        }
 
         public async Task<MarketplaceSearch> GetDataAsync(string city)
         {
-            var recentEntry = await _realEstateRepository.GetLatestSearchByCityAsync(city);
-            if (recentEntry != null)
-            {
-                var deserializedData = JsonConvert.DeserializeObject<List<SearchData>>(recentEntry.Content);
-                MarketplaceSearch result = new MarketplaceSearch()
-                {
-                    Data = deserializedData ?? new List<SearchData>(),
-                    TotalCount = recentEntry.Name != null ? int.Parse(recentEntry.Name) : 0,
-                };
+            var latestBatch = await _propertyDataRepository.GetLatestByCityAsync(city);
+            var data = _mapper.Map<List<SearchData>>(latestBatch);
 
-                return result;
-            }
-            return new MarketplaceSearch();
+            return new MarketplaceSearch
+            {
+                Data = data,
+                TotalCount = data.Count
+            };
         }
 
        
@@ -80,17 +71,17 @@ namespace AF_mobile_web_api.Services
                     .ToList()
             };
 
-            var findings = new WebSearchResults
-            {
-                Name = combinedData.Data.Count.ToString(),
-                Content = JsonConvert.SerializeObject(combinedData.Data),
-                CreationDate = DateTime.UtcNow,
-                City = city.ToString()
-            };
-                        
             var propertiesList = _mapper.Map<List<PropertyData>>(combinedData.Data);
 
-            await _realEstateRepository.SaveWebSearchResultAsync(findings);
+            // Stamp every row of this scrape with the same timestamp so it forms one identifiable
+            // batch: GetLatestByCityAsync selects the newest batch for the snapshot charts.
+            var scrapeTime = DateTime.UtcNow;
+            foreach (var property in propertiesList)
+            {
+                property.City = city.ToString();
+                property.AddedRecordTime = scrapeTime;
+            }
+
             await _propertyDataRepository.SaveMarketplaceDataAsync(propertiesList);
 
             return combinedData;

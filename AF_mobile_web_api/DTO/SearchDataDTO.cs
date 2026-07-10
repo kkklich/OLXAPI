@@ -7,7 +7,6 @@ namespace AF_mobile_web_api.DTO
             public string Id { get; set; } //  internal id 
             public string Url { get; set; } //url of the offer
             public string Title { get; set; } //title of the offer
-            public DateTime CreatedTime { get; set; } //date of creation
             public double Price { get; set; } // total price
             public double PricePerMeter { get; set; } // price per m2
             public int Floor { get; set; }// number of floor

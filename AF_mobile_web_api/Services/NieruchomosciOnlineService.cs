@@ -160,7 +160,6 @@ namespace AF_mobile_web_api.Services
                 WebName = WebName.NieruchomsciOnline,
                 Url = a.ShareUrl ?? "",
                 Title = a.MetaTitle ?? "",
-                CreatedTime = ParsePolishDate(a.ChangeDate) ?? ParsePolishDate(a.ModDate) ?? DateTime.MinValue,
                 Price = price,
                 Market = a.Market switch
                 {
@@ -176,13 +175,9 @@ namespace AF_mobile_web_api.Services
                     Lat = ParseDouble(a.Map?.Latitude),
                     Lon = ParseDouble(a.Map?.Longitude),
                     City = a?.DlData?.CityName ?? "",
-                    District = a?.DlData?.QuarterName ?? "",
-                    Street = b?.Rlocstsn ?? "",
-                    Number = ""
+                    District = a?.DlData?.QuarterName ?? ""
                 },
-                Description = a?.MetaTitle ?? "",
                 Floor = a.Floor,
-                Photos = new List<Photos>(),
                 BuildingType = buildingType
             };
             
@@ -194,18 +189,6 @@ namespace AF_mobile_web_api.Services
             if (string.IsNullOrWhiteSpace(s)) return 0;
             s = s.Replace(" ", "").Replace("\u00A0", "");
             return double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : 0;
-        }       
-
-        private DateTime? ParsePolishDate(string? s)
-        {
-            if (string.IsNullOrWhiteSpace(s)) return null;
-            var formats = new[] { "d MMMM yyyy", "dd MMMM yyyy", "d MMM yyyy", "dd MMM yyyy" };
-            if (DateTime.TryParseExact(s, formats, new CultureInfo("pl-PL"),
-                    DateTimeStyles.AssumeLocal, out var dt))
-                return dt;
-
-            return DateTime.TryParse(s, new CultureInfo("pl-PL"),
-                DateTimeStyles.AssumeLocal, out dt) ? dt : null;
         }
     }
 }
