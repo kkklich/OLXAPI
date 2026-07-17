@@ -16,10 +16,7 @@ namespace ApplicationDatabase.Migrations
             migrationBuilder.DropTable(
                 name: "WebSearchResults");
 
-            // Columns nothing reads anymore.
-            migrationBuilder.DropColumn(name: "OffertId", table: "PropertyData");
-            migrationBuilder.DropColumn(name: "CreatedTime", table: "PropertyData");
-            migrationBuilder.DropColumn(name: "Description", table: "PropertyData");
+            // OffertId, CreatedTime and Description are intentionally kept on PropertyData.
 
             // Flat location columns the district chart and map now read directly from the row.
             migrationBuilder.AddColumn<string>(
@@ -51,29 +48,6 @@ namespace ApplicationDatabase.Migrations
             migrationBuilder.DropColumn(name: "District", table: "PropertyData");
             migrationBuilder.DropColumn(name: "Lat", table: "PropertyData");
             migrationBuilder.DropColumn(name: "Lon", table: "PropertyData");
-
-            migrationBuilder.AddColumn<string>(
-                name: "OffertId",
-                table: "PropertyData",
-                type: "longtext",
-                nullable: false,
-                defaultValue: "")
-                .Annotation("MySql:CharSet", "utf8mb4");
-
-            migrationBuilder.AddColumn<DateTime>(
-                name: "CreatedTime",
-                table: "PropertyData",
-                type: "datetime(6)",
-                nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
-
-            migrationBuilder.AddColumn<string>(
-                name: "Description",
-                table: "PropertyData",
-                type: "longtext",
-                nullable: false,
-                defaultValue: "")
-                .Annotation("MySql:CharSet", "utf8mb4");
 
             migrationBuilder.CreateTable(
                 name: "WebSearchResults",

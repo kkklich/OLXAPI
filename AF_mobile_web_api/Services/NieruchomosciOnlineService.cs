@@ -24,10 +24,14 @@ namespace AF_mobile_web_api.Services
             int minPriceStart = 150000;
             int maxPriceEnd = 1000000;
             int step = 3000;
-            string BaseUrlTemplate = "https://krakow.nieruchomosci-online.pl/szukaj.html?3,mieszkanie,sprzedaz,,{0},,,,{1}-{2}&ajax=1";
+            // The portal serves each city from its own subdomain; a hardcoded "krakow." here
+            // would silently return Krakow-area results for every other CityEnum value.
+            var citySubdomain = city.ToString().ToLowerInvariant();
+            string BaseUrlTemplate = $"https://{citySubdomain}.nieruchomosci-online.pl/szukaj.html?3,mieszkanie,sprzedaz,,{{0}},,,,{{1}}-{{2}}&ajax=1";
 
             var allResults = new ConcurrentBag<SearchData>();
-            var priceRanges = Enumerable.Range(0, (maxPriceEnd - minPriceStart) / step)
+            // Ceiling division so the last partial range (e.g. 999000-1000000) is still fetched.
+            var priceRanges = Enumerable.Range(0, (maxPriceEnd - minPriceStart + step - 1) / step)
                 .Select(i => (Min: minPriceStart + i * step, Max: Math.Min(minPriceStart + (i + 1) * step, maxPriceEnd)))
                 .ToList();
 
@@ -151,9 +155,17 @@ namespace AF_mobile_web_api.Services
 
         private SearchData MapOne(AdditionalData a, RecordProps b, long internalId)
         {
+            // b comes from FirstOrDefault and can be null (and Rccata/Pbh can be null
+            // even when b isn't) — a single such listing must not kill the whole scrape.
             var area = b?.Rsur ?? 1.0D;
             var price = ParseDouble(a.PrimaryPrice);
-            var buildingType = b.Rccata?.ToLower().Contains("flats") == true ? "Blok" : b.Rccata ?? "";
+            var buildingType = b?.Rccata == null
+                ? ""
+                : b.Rccata.ToLower().Contains("flats") ? "Blok" : b.Rccata;
+            var seller = b?.Pbh?.ToLower();
+            var isPrivate = !string.IsNullOrWhiteSpace(seller)
+                && !seller.Contains("agency")
+                && !seller.Contains("dev");
             var sd = new SearchData
             {
                 Id = a.Id,
@@ -167,9 +179,9 @@ namespace AF_mobile_web_api.Services
                     "secondary" => "Wtórny",    
                     _ => a.Market ?? "Pierwotny"
                 },
-                Private = !b.Pbh.ToLower().Contains("agency") && !b.Pbh.ToLower().Contains("dev"),
-                Area = area, 
-                PricePerMeter =  price / area,
+                Private = isPrivate,
+                Area = area,
+                PricePerMeter = area > 0 ? price / area : 0,
                 Location = new LocationPlace
                 {
                     Lat = ParseDouble(a.Map?.Latitude),

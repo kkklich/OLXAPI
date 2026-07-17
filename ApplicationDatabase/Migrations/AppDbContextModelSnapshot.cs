@@ -39,6 +39,13 @@ namespace ApplicationDatabase.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
                     b.Property<string>("District")
                         .IsRequired()
                         .HasColumnType("longtext");
@@ -53,6 +60,10 @@ namespace ApplicationDatabase.Migrations
                         .HasColumnType("double");
 
                     b.Property<string>("Market")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("OffertId")
                         .IsRequired()
                         .HasColumnType("longtext");
 

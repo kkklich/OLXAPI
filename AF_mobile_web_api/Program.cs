@@ -15,10 +15,18 @@ var builder = WebApplication.CreateBuilder(args);
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5016";
 builder.WebHost.UseUrls($"http://*:{port}");
 
+// Optional override, e.g. "8.0.36-mysql" or "10.6.14-mariadb"; the fallback version is
+// deliberately kept as-is - it selects the conservative feature set today's prod SQL was
+// generated with, and changing it blindly could alter query translation on a live DB.
+var serverVersionSetting = builder.Configuration["Database:ServerVersion"];
+var serverVersion = string.IsNullOrWhiteSpace(serverVersionSetting)
+    ? new MySqlServerVersion(new Version(7, 0, 0))
+    : ServerVersion.Parse(serverVersionSetting);
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(
         builder.Configuration.GetConnectionString("ConnectionString"),
-        new MySqlServerVersion(new Version(7, 0, 0)) // adjust version
+        serverVersion
     ));
 builder.Services.AddAutoMapper(typeof(MappingProfile));
 
@@ -30,11 +38,17 @@ builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepositor
 
 builder.Services.AddScoped<IPropertyDataRepository, PropertyDataRepository>();
 
+builder.Services.AddScoped<IPropertyComparer, PropertyComparer>();
+
 builder.Services.AddScoped<IOLXAPIService, OLXAPIService>();
 builder.Services.AddScoped<INieruchomosciOnlineService, NieruchomosciOnlineService>();
 builder.Services.AddScoped<IMorizonApiService, MorizonApiService>();
 builder.Services.AddScoped<IRealEstateServices, RealEstateServices>();
 builder.Services.AddScoped<IStatisticServices, StatisticServices>();
+builder.Services.AddScoped<IPropertyListService, PropertyListService>();
+
+// Singleton on purpose: it owns the "one scrape at a time" flag shared by all requests.
+builder.Services.AddSingleton<IScrapeJobRunner, ScrapeJobRunner>();
 
 
 builder.Services.AddMemoryCache();//TODO add redis cache for better performance and scalability
@@ -57,14 +71,20 @@ builder.Logging.AddEventSourceLogger();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 
-var allowedFrontendUrl = builder.Configuration["AllowedOrigins:Frontend"]
-                         ?? "http://localhost:4200";
+// "AllowedOrigins:Frontend" may hold several origins separated by commas
+var allowedOrigins = (builder.Configuration["AllowedOrigins:Frontend"] ?? string.Empty)
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+if (allowedOrigins.Length == 0)
+{
+    allowedOrigins = new[] { "http://localhost:4200" };
+}
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowSpecificOrigin",
         builder => builder
-            .WithOrigins(allowedFrontendUrl)
+            .WithOrigins(allowedOrigins)
             .AllowAnyMethod()
             .AllowAnyHeader());
 });

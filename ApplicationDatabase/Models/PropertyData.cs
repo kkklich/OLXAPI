@@ -24,6 +24,11 @@ namespace ApplicationDatabase.Models
         public double Lat { get; set; }
         public double Lon { get; set; }
 
+        // Source-offer metadata retained on the row (originally from the scrape payload).
+        public string OffertId { get; set; }
+        public string Description { get; set; }
+        public DateTime CreatedTime { get; set; }
+
         // Single timestamp shared by every row of one scrape - acts as the batch marker.
         // Snapshot charts read the latest batch; the timeline groups all batches by day.
         public DateTime AddedRecordTime { get; set; }
