@@ -35,7 +35,6 @@ namespace AF_mobile_web_api.Helper
 
         //Morizon
         public const string MorizonAPI = "https://www.morizon.pl/api-morizon";
-        public const string BasePhotoUrl = "https://img.morizon.pl/";
         public const string DefaultSearchUrl = "/mieszkania/najtansze/krakow/?ps%5Bprice_from%5D=100000&ps%5Bprice_to%5D=750000";
         public const string GraphqlQuery = @"query getPropertyListingData($url: String!) {
                 searchResult: searchProperties(url: $url) {
@@ -80,7 +79,6 @@ namespace AF_mobile_web_api.Helper
                 id
                 name
                 }
-                description (maxLength: 300)
                 floorFormatted
                 highlightText
                 id
@@ -89,8 +87,6 @@ namespace AF_mobile_web_api.Helper
                 isRecommended
                 location {
                 location
-                street,
-                number
                 }
                 numberOfRooms
                 #photos {
@@ -98,7 +94,6 @@ namespace AF_mobile_web_api.Helper
                 #id
                 #name
                 #}
-                photosNumber
                 promotionPoints
                 has3dView
                 hasVideo

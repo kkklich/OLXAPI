@@ -10,7 +10,5 @@ namespace AF_mobile_web_api.Services.Interfaces
         Task<MarketplaceSearch> GetdataForManyCitiesAsync();
         Task<MarketplaceSearch> LoadDataMarkeplacesAsync(CityEnum city = CityEnum.Krakow);
         Task<List<SearchDataDTO>> GetUniqueOffertsAsync();
-
-
     }
 }

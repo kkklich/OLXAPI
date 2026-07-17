@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using AF_mobile_web_api.Filters;
 using AF_mobile_web_api.Services.Interfaces;
+using AF_mobile_web_api.DTO;
 
 namespace AF_mobile_web_api.Controllers
 {
@@ -11,15 +13,20 @@ namespace AF_mobile_web_api.Controllers
         private readonly IStatisticServices _statisticServices;
         private readonly IMorizonApiService _morizonApiService;
         private readonly INieruchomosciOnlineService _nieruchomosciOnlineService;
-        public RealEstateController(IRealEstateServices realEstate, IStatisticServices statisticServices, IMorizonApiService morizonApiService, INieruchomosciOnlineService nieruchomosciOnlineService)
+        private readonly IPropertyListService _list;
+        private readonly IScrapeJobRunner _scrapeRunner;
+        public RealEstateController(IRealEstateServices realEstate, IStatisticServices statisticServices, IMorizonApiService morizonApiService, INieruchomosciOnlineService nieruchomosciOnlineService, IPropertyListService list, IScrapeJobRunner scrapeRunner)
         {
             _realEstate = realEstate;
             _statisticServices = statisticServices;
             _morizonApiService = morizonApiService;
             _nieruchomosciOnlineService = nieruchomosciOnlineService;
+            _list = list;
+            _scrapeRunner = scrapeRunner;
         }
 
         [HttpGet("nieruchomosciOnline")]
+        [RequireScrapeApiKey]
         public async Task<IActionResult> getNieruchomosciOnlineAPI()
         {
             var result = await _nieruchomosciOnlineService.GetAllPagesAsync();
@@ -27,24 +34,33 @@ namespace AF_mobile_web_api.Controllers
         }
         
         [HttpGet("morizon")]
+        [RequireScrapeApiKey]
         public async Task<IActionResult> getMorizonAPI()
         {
             var result = await _morizonApiService.GetPropertyListingDataAsync();
             return Ok(result);           
         }
 
+        // A full scrape outlives any reverse-proxy request timeout, so these two endpoints
+        // hand the work to the background runner and reply immediately: 202 when started,
+        // 409 when a scrape is already in progress (running two at once would write
+        // overlapping "latest" batches).
         [HttpGet("loadDataMarkeplaces")]
-        public async Task<IActionResult> LoadDataMarkeplaces()
+        [RequireScrapeApiKey]
+        public IActionResult LoadDataMarkeplaces()
         {
-            var result = await _realEstate.LoadDataMarkeplacesAsync();
-            return Ok(result);            
+            return _scrapeRunner.TryStart("LoadDataMarkeplaces", s => s.LoadDataMarkeplacesAsync())
+                ? Accepted(new { message = "Scrape started" })
+                : Conflict(new { message = "A scrape is already running" });
         }
-        
+
         [HttpGet("getdataForManyCities")]
-        public async Task<IActionResult> GetdataForManyCities()
+        [RequireScrapeApiKey]
+        public IActionResult GetdataForManyCities()
         {
-            var result = await _realEstate.GetdataForManyCitiesAsync();
-            return Ok(result);          
+            return _scrapeRunner.TryStart("GetdataForManyCities", s => s.GetdataForManyCitiesAsync())
+                ? Accepted(new { message = "Scrape started for all cities" })
+                : Conflict(new { message = "A scrape is already running" });
         }
         
         [HttpGet("getRealEstate/{city}")]
@@ -111,11 +127,31 @@ namespace AF_mobile_web_api.Controllers
             return Ok(result);
         }
 
+        [HttpGet("getFullDashboard/{city}")]
+        public async Task<IActionResult> GetFullDashboard(string city)
+        {
+            var result = await _statisticServices.GetFullDashboardDataAsync(city);
+            return Ok(result);
+        }
+
         [HttpGet("filterByParameter/{groupBy}/{city}/{parameter}")]
         public async Task<IActionResult> FilterByParameter(string groupBy,  string city,  string parameter)
         {
             var chart = await _statisticServices.FilterByParameter(groupBy, city, parameter);
-            return Ok(chart);            
+            return Ok(chart);
+        }
+
+        [HttpGet("properties")]
+        public async Task<IActionResult> GetProperties([FromQuery] PropertyQueryParams query)
+        {
+            return Ok(await _list.GetPagedAsync(query));
+        }
+
+        [HttpGet("propertyHistory/{city}")]
+        public async Task<IActionResult> GetPropertyHistory(string city, [FromQuery] string url)
+        {
+            var history = await _list.GetHistoryAsync(city, url);
+            return history is null ? NotFound() : Ok(history);
         }
     }
 }
