@@ -383,6 +383,11 @@ namespace AF_mobile_web_api.Services
 
         private RealEstateStatistics CalculateStatistics(List<SearchData> data)
         {
+            // Average() throws InvalidOperationException on an empty list - an empty DB result
+            // should surface as zeroed statistics, not HTTP 500.
+            if (data == null || data.Count == 0)
+                return new RealEstateStatistics();
+
             var stats = new RealEstateStatistics
             {
                 MedianPricePerMeter = CalculateMedianPricePerMeter(data),
@@ -439,6 +444,11 @@ namespace AF_mobile_web_api.Services
 
         private RealEstateStatistics DisplayStatistics(List<SearchData> data)
         {
+            // Average() throws InvalidOperationException on an empty list - an empty DB result
+            // should surface as zeroed statistics, not HTTP 500.
+            if (data == null || data.Count == 0)
+                return new RealEstateStatistics();
+
             return new RealEstateStatistics
             {
                 MedianPricePerMeter = CalculateMedianPricePerMeter(data),
@@ -483,7 +493,11 @@ namespace AF_mobile_web_api.Services
 
         public async Task<ChartData> GetBarChartData(string city, string groupedBy)
         {
-            var results = await GetCachedRealEstateDataAsync(city);
+            // Canonicalize before caching: the raw string becomes an IMemoryCache key, so any
+            // garbage/differently-cased value would add a permanent cache entry plus a DB query.
+            var parsedCity = ParseCity(city);
+
+            var results = await GetCachedRealEstateDataAsync(parsedCity.ToString());
             return GetBarChartDataByBuildingType(results, groupedBy);
 
         }
@@ -647,7 +661,11 @@ namespace AF_mobile_web_api.Services
 
         public async Task<ChartData> FilterByParameter(string groupBy, string city, string parameter)
         {
-            var results = await GetCachedRealEstateDataAsync(city);
+            // Canonicalize before caching: the raw string becomes an IMemoryCache key, so any
+            // garbage/differently-cased value would add a permanent cache entry plus a DB query.
+            var parsedCity = ParseCity(city);
+
+            var results = await GetCachedRealEstateDataAsync(parsedCity.ToString());
 
             var groupedStats = GetDataWithGroupStatistics(results, groupBy);
             var fullChart = BuildChartData(groupedStats);

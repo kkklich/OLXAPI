@@ -11,118 +11,119 @@ namespace AF_mobile_web_api.Services
     public class MorizonApiService: IMorizonApiService
     {
         private readonly IHTTPClientServices _httpClient;
-        public MorizonApiService(IHTTPClientServices httpClient)
+        private readonly ILogger<MorizonApiService> _logger;
+        public MorizonApiService(IHTTPClientServices httpClient, ILogger<MorizonApiService> logger)
         {
             _httpClient = httpClient;
+            _logger = logger;
         }
 
         public async Task<MarketplaceSearch> GetPropertyListingDataAsync(CityEnum city = CityEnum.Krakow, string? searchUrl = null)
         {
-            try
+            var cityName = city.ToString().ToLower();
+            var allResults = new MarketplaceSearch { Data = new List<SearchData>() };
+
+            // Define price ranges to cover 100,000 to 1,000,000 PLN
+            int minPrice = 100000;
+            int maxPrice = 1000000;
+            int priceStep = 5000;
+
+            var contexts = new List<FetchContext>();
+
+            if (!string.IsNullOrWhiteSpace(searchUrl))
             {
-                var cityName = city.ToString().ToLower();
-                var allResults = new MarketplaceSearch { Data = new List<SearchData>() };
-                var tasks = new List<Task<MarketplaceSearch>>();
-
-                // Define price ranges to cover 100,000 to 1,000,000 PLN
-                int minPrice = 100000;
-                int maxPrice = 1000000;
-                int priceStep = 5000;
-
-                var contexts = new List<FetchContext>();
-
-                if (!string.IsNullOrWhiteSpace(searchUrl))
+                contexts.Add(new FetchContext { Url = searchUrl});
+            }
+            else
+            {
+                foreach (var buildingType in Enum.GetValues<BuildingType>())
                 {
-                    contexts.Add(new FetchContext { Url = searchUrl});
-                }
-                else
-                {
-                    foreach (var buildingType in Enum.GetValues<BuildingType>())
+                    foreach (var kind in Enum.GetValues<MarketKind>())
                     {
-                        foreach (var kind in Enum.GetValues<MarketKind>())
+                        for (int priceFrom = minPrice; priceFrom < maxPrice; priceFrom += priceStep)
                         {
-                            for (int priceFrom = minPrice; priceFrom < maxPrice; priceFrom += priceStep)
+                            int priceTo = Math.Min(priceFrom + priceStep, maxPrice);
+                            var building = buildingType.ToString().ToLower() ?? "";
+                            var kindNumber = (int)kind;
+                            var url = $"/mieszkania/{building}/{cityName}/?ps%5Bprice_from%5D={priceFrom}&ps%5Bprice_to%5D={priceTo}&ps%5Bmarket_type%5D={kindNumber}";
+                            contexts.Add(new FetchContext
                             {
-                                int priceTo = Math.Min(priceFrom + priceStep, maxPrice);
-                                var building = buildingType.ToString().ToLower() ?? "";
-                                var kindNumber = (int)kind;
-                                var url = $"/mieszkania/{building}/{cityName}/?ps%5Bprice_from%5D={priceFrom}&ps%5Bprice_to%5D={priceTo}&ps%5Bmarket_type%5D={kindNumber}";
-                                contexts.Add(new FetchContext
-                                {
-                                    Url = url,
-                                    Market = kind,
-                                    Building = buildingType,
-                                    PriceFrom = priceFrom,
-                                    PriceTo = priceTo
-                                });
-                            }                        
-                        }                    
+                                Url = url,
+                                Market = kind,
+                                Building = buildingType,
+                                PriceFrom = priceFrom,
+                                PriceTo = priceTo
+                            });
+                        }
                     }
                 }
-
-                // Add pagination per context (pages 2-5)
-                var expandedUrls = new List<FetchContext>();
-                foreach (var ctx in contexts)
-                {
-                    expandedUrls.Add(ctx);
-                    for (int page = 2; page <= 5; page++)
-                    {
-                        expandedUrls.Add(new FetchContext
-                        {
-                            Url = $"{ctx.Url}&page={page}",
-                            Market = ctx.Market,
-                            Building = ctx.Building,
-                            PriceFrom = ctx.PriceFrom,
-                            PriceTo = ctx.PriceTo,
-                            Page = page
-                        });
-                    }
-                }
-
-                // Process URLs in batches to avoid overwhelming the API
-                var batchSize = 10; // Adjust based on rate limits
-                var batches = expandedUrls
-                    .Select((url, index) => new { url, index })
-                    .GroupBy(x => x.index / batchSize)
-                    .Select(g => g.Select(x => x.url).ToList())
-                    .ToList();
-
-                foreach (var batch in batches)
-                {
-                    var batchTasks = batch.Select(c => FetchSingleSearchAsync(c.Url)).ToArray();
-                    var batchResults = await Task.WhenAll(batchTasks);
-
-                    foreach (var result in batchResults.Where(r => r != null))
-                    {
-                        result.Data.ForEach(p =>
-                        {
-                            p.Market = batch[0].Market.ToString();
-                            p.BuildingType = batch[0].Building.ToString();
-                        });
-                        allResults.Data.AddRange(result.Data);
-                        allResults.TotalCount += result.TotalCount;
-                    }
-
-                    // Add delay between batches to respect rate limits
-                    await Task.Delay(100); // 100 ms delay between batches
-                }
-
-                // Remove duplicates based on property ID
-                var uniqueProperties = allResults.Data
-                    .GroupBy(p => p.Id)
-                    .Select(g => g.First())
-                    .ToList();
-
-                return new MarketplaceSearch
-                {
-                    Data = uniqueProperties,
-                    TotalCount = uniqueProperties.Count
-                };
             }
-            catch (Exception ex)
+
+            // Add pagination per context (pages 2-5)
+            var expandedUrls = new List<FetchContext>();
+            foreach (var ctx in contexts)
             {
-                throw new Exception($"Error fetching comprehensive property data: {ex.Message}", ex);
+                expandedUrls.Add(ctx);
+                for (int page = 2; page <= 5; page++)
+                {
+                    expandedUrls.Add(new FetchContext
+                    {
+                        Url = $"{ctx.Url}&page={page}",
+                        Market = ctx.Market,
+                        Building = ctx.Building,
+                        PriceFrom = ctx.PriceFrom,
+                        PriceTo = ctx.PriceTo,
+                        Page = page
+                    });
+                }
             }
+
+            // Process URLs in batches to avoid overwhelming the API
+            var batchSize = 10; // Adjust based on rate limits
+            var batches = expandedUrls
+                .Select((url, index) => new { url, index })
+                .GroupBy(x => x.index / batchSize)
+                .Select(g => g.Select(x => x.url).ToList())
+                .ToList();
+
+            foreach (var batch in batches)
+            {
+                var batchTasks = batch.Select(c => FetchSingleSearchAsync(c.Url)).ToArray();
+                var batchResults = await Task.WhenAll(batchTasks);
+
+                // batchResults is index-aligned with batch, so each result
+                // is stamped with its own context, not the first one's
+                for (int i = 0; i < batchResults.Length; i++)
+                {
+                    var result = batchResults[i];
+                    if (result == null)
+                        continue;
+
+                    var context = batch[i];
+                    result.Data.ForEach(p =>
+                    {
+                        p.Market = context.Market.ToString();
+                        p.BuildingType = context.Building.ToString();
+                    });
+                    allResults.Data.AddRange(result.Data);
+                    allResults.TotalCount += result.TotalCount;
+                }
+
+                // Add delay between batches to respect rate limits
+                await Task.Delay(100); // 100 ms delay between batches
+            }
+
+            // Remove duplicates based on property ID
+            var uniqueProperties = allResults.Data
+                .GroupBy(p => p.Id)
+                .Select(g => g.First())
+                .ToList();
+
+            return new MarketplaceSearch
+            {
+                Data = uniqueProperties,
+                TotalCount = uniqueProperties.Count
+            };
         }
 
         public async Task<MarketplaceSearch?> FetchSingleSearchAsync(string? searchUrl = null)
@@ -143,7 +144,10 @@ namespace AF_mobile_web_api.Services
             }
             catch (Exception ex)
             {
-                throw new Exception($"Error fetching data from Morizon API: {ex.Message}", ex);
+                // Callers filter out null results, so a single failed URL is logged
+                // and skipped instead of failing the whole scrape via Task.WhenAll.
+                _logger.LogError(ex, "Error fetching data from Morizon API for search URL {SearchUrl}", searchUrl);
+                return null;
             }
         }
 

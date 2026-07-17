@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ApplicationDatabase.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260709120000_ConsolidateToPropertyDataOnly")]
-    partial class ConsolidateToPropertyDataOnly
+    [Migration("20260717000000_AddUrlAddedRecordTimeIndex")]
+    partial class AddUrlAddedRecordTimeIndex
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

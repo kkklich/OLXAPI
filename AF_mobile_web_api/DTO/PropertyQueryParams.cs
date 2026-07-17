@@ -12,6 +12,8 @@ namespace AF_mobile_web_api.DTO
 
         public string? City { get; set; }
         public string? District { get; set; }
+        // "primary" | "secondary" (mapped to the stored Polish values), or a raw
+        // stored value ("Pierwotny"/"Wtórny") passed through unchanged.
         public string? Market { get; set; }
         public string? BuildingType { get; set; }
         public int? WebName { get; set; }
