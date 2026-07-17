@@ -35,11 +35,17 @@ namespace AF_mobile_web_api.Middleware
         private async Task HandleExceptionAsync(HttpContext context, Exception exception)
         {
             context.Response.ContentType = "application/json";
-            context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
 
-            var response = _env.IsDevelopment()
-                ? new { StatusCode = context.Response.StatusCode, Message = exception.Message, StackTrace = exception.StackTrace }
-                : new { StatusCode = context.Response.StatusCode, Message = "Internal Server Error", StackTrace = "" };
+            // validation errors (e.g. unknown city name) are the caller's fault -> 400 with the real message
+            var isValidationError = exception is ArgumentException;
+            context.Response.StatusCode = isValidationError
+                ? (int)HttpStatusCode.BadRequest
+                : (int)HttpStatusCode.InternalServerError;
+
+            var message = isValidationError || _env.IsDevelopment() ? exception.Message : "Internal Server Error";
+            var stackTrace = _env.IsDevelopment() ? exception.StackTrace : "";
+
+            var response = new { StatusCode = context.Response.StatusCode, Message = message, StackTrace = stackTrace };
 
             var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             var json = JsonSerializer.Serialize(response, options);

@@ -9,9 +9,11 @@ namespace AF_mobile_web_api.Services
     public class OLXAPIService: IOLXAPIService
     {
         private readonly IHTTPClientServices _httpClient;
-        public OLXAPIService(IHTTPClientServices httpClient)
+        private readonly ILogger<OLXAPIService> _logger;
+        public OLXAPIService(IHTTPClientServices httpClient, ILogger<OLXAPIService> logger)
         {
             _httpClient = httpClient;
+            _logger = logger;
         }
 
         public  async Task<List<SearchData>> GetAllOffersAsync(
@@ -35,8 +37,8 @@ namespace AF_mobile_web_api.Services
             var tasks = new List<Task<List<SearchData>>>(buckets.Count);
             foreach (var b in buckets)
             {
-                tasks.Add(FetchRangeAllPagesAsync(
-                    categoryId, regionId, cityId, b.from, b.to, offsetStart)); // one task per bucket 
+                tasks.Add(FetchRangeAllPagesSafeAsync(
+                    categoryId, regionId, cityId, b.from, b.to, offsetStart)); // one task per bucket
             }
 
             var results = await Task.WhenAll(tasks).ConfigureAwait(false); // run all and wait 
@@ -46,8 +48,30 @@ namespace AF_mobile_web_api.Services
             return all; // merged list
         }
 
+        // Isolates a single price bucket: a failed bucket logs and yields an empty list
+        // instead of failing the whole Task.WhenAll in GetAllOffersAsync
+        private async Task<List<SearchData>> FetchRangeAllPagesSafeAsync(
+            int categoryId,
+            int? regionId,
+            int? cityId,
+            int priceFrom,
+            int priceTo,
+            int offsetStart
+         )
+        {
+            try
+            {
+                return await FetchRangeAllPagesAsync(categoryId, regionId, cityId, priceFrom, priceTo, offsetStart);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "OLX price bucket {PriceFrom}-{PriceTo} failed, skipping bucket", priceFrom, priceTo);
+                return new List<SearchData>();
+            }
+        }
+
         // Fetch all pages for a single price range using offset/limit
-        private  async Task<List<SearchData>> FetchRangeAllPagesAsync(            
+        private  async Task<List<SearchData>> FetchRangeAllPagesAsync(
             int categoryId,
             int? regionId,
             int? cityId,
@@ -59,6 +83,7 @@ namespace AF_mobile_web_api.Services
             var results = new List<SearchData>();
             var offset = offsetStart;
             const int limit = 40; //olx API limit 40
+            const int maxOffset = 1000; // OLX rejects deeper offsets; also guards against an endless loop
 
             // Do-while style loop to ensure at least one request and then continue while page returns items
             while (true)
@@ -69,12 +94,24 @@ namespace AF_mobile_web_api.Services
                 var result = await rawResponse.Content.ReadAsStringAsync();
                 var data = JsonConvert.DeserializeObject<QueryData>(result);
 
-                var convertedData = ExtractListOfParameters(data.Data);               
-                
-                results.AddRange(convertedData);
-                if (convertedData.Count < limit - 2) break;
+                var rawPageSize = data?.Data?.Count ?? 0;
+                if (rawPageSize > 0)
+                {
+                    results.AddRange(ExtractListOfParameters(data.Data));
+                }
 
-                offset += limit; 
+                // Break on the raw page size, not the post-filter count,
+                // so filtered-out (e.g. "TBS") listings cannot end pagination early
+                if (rawPageSize < limit - 2) break;
+
+                offset += limit;
+                if (offset >= maxOffset)
+                {
+                    _logger.LogWarning(
+                        "OLX pagination hit offset cap {MaxOffset} for price bucket {PriceFrom}-{PriceTo}, stopping",
+                        maxOffset, priceFrom, priceTo);
+                    break;
+                }
             }
 
             return results; // all pages for range
@@ -137,7 +174,7 @@ namespace AF_mobile_web_api.Services
             List<SearchData> result = new List<SearchData>();
             foreach (var response in responses)
             {
-                if (response.Title.Contains("TBS"))
+                if (response.Title?.Contains("TBS") == true)
                     continue;
                 var extractedObject = ExtractParameter(response);
                 result.Add(extractedObject);
@@ -153,9 +190,7 @@ namespace AF_mobile_web_api.Services
             record.Id = data.Id;
             record.Url = data.Url;
             record.Title = data.Title;
-            record.CreatedTime = data.created_time;
             record.Private = !data.Business;
-            record.Description = data.Description;
             record.Location = new LocationPlace()
             {
                 City = data?.Location?.City?.Name ?? string.Empty,
@@ -182,9 +217,6 @@ namespace AF_mobile_web_api.Services
                         break;
                     case ConstantHelper.PricePerMeter:
                         data.PricePerMeter = ParseNumberToDouble(param?.Value?.Key ?? string.Empty);
-
-                        if (data.PricePerMeter == 0)
-                            data.PricePerMeter = data.Price / data.Area;
                         break;
                     case ConstantHelper.FloorSelect:
                         if (int.TryParse(param.Value?.Label, out var floor))
@@ -201,6 +233,11 @@ namespace AF_mobile_web_api.Services
                         break;
                 }
             }
+
+            // Fallback computed only after all params are parsed (param order is not guaranteed);
+            // the Area/Price guards keep Infinity/NaN out of the database
+            if (data.PricePerMeter <= 0 && data.Area > 0 && data.Price > 0)
+                data.PricePerMeter = data.Price / data.Area;
 
             return data;
         }

@@ -20,11 +20,26 @@ namespace AF_mobile_web_api.Services
         // districts with fewer offers than this produce statistically meaningless medians
         private const int MinOffersPerDistrict = 5;
 
+        // a "deal" more than this far below the district median is a scraping error
+        // (swapped price/area, placeholder values), not a real offer
+        private const double MaxBelowMedianPercent = 50;
+
         public StatisticServices(IRealEstateServices realEstate, IMemoryCache cache, IPropertyDataRepository propertyDataRepository)
         {
             _realEstate = realEstate;
             _cache = cache;
             _propertyDataRepository = propertyDataRepository;
+        }
+
+        private static CityEnum ParseCity(string cityName)
+        {
+            if (string.IsNullOrWhiteSpace(cityName))
+                throw new ArgumentException("City name cannot be null or empty", nameof(cityName));
+
+            if (!Enum.TryParse<CityEnum>(cityName, true, out CityEnum city))
+                throw new ArgumentException($"Invalid city name: {cityName}. Valid cities: {string.Join(", ", Enum.GetNames<CityEnum>())}");
+
+            return city;
         }
 
         private async Task<List<SearchData>> GetCachedRealEstateDataAsync(string city)
@@ -48,38 +63,12 @@ namespace AF_mobile_web_api.Services
             return results;
         }
 
-        public async Task<List<TimelinePriceDTO>> GetTimelinePrice(string cityName)
+        public async Task<FullDashboardDTO> GetFullDashboardDataAsync(string cityName)
         {
-            if (string.IsNullOrWhiteSpace(cityName))
-                throw new ArgumentException("City name cannot be null or empty", nameof(cityName));
+            var city = ParseCity(cityName);
 
-            if (!Enum.TryParse<CityEnum>(cityName, true, out CityEnum city))
-                throw new ArgumentException($"Invalid city name: {cityName}. Valid cities: {string.Join(", ", Enum.GetNames<CityEnum>())}");
-
-            // grouped and sorted in SQL - avoids loading every property row into memory
-            var groupedData = await _propertyDataRepository.GetTimelineByCityAsync(city.ToString());
-
-            return groupedData
-                .Select(x => new TimelinePriceDTO
-                {
-                    AddedDate = x.Date.ToString("dd-MM-yyyy"),
-                    AvgPrice = Math.Round(x.AvgPrice, 1),
-                    AvgPricePerMeter = Math.Round(x.AvgPricePerMeter, 1),
-                    Count = x.Count
-                })
-                .ToList();
-        }
-
-        public async Task<DashboardChartsDTO> GetDashboardCharts(string cityName)
-        {
-            if (string.IsNullOrWhiteSpace(cityName))
-                throw new ArgumentException("City name cannot be null or empty", nameof(cityName));
-
-            if (!Enum.TryParse<CityEnum>(cityName, true, out CityEnum city))
-                throw new ArgumentException($"Invalid city name: {cityName}. Valid cities: {string.Join(", ", Enum.GetNames<CityEnum>())}");
-
-            var cacheKey = $"DashboardCharts_{city}";
-            if (_cache.TryGetValue(cacheKey, out DashboardChartsDTO cached))
+            var cacheKey = $"FullDashboard_{city}";
+            if (_cache.TryGetValue(cacheKey, out FullDashboardDTO cached))
             {
                 return cached;
             }
@@ -90,7 +79,40 @@ namespace AF_mobile_web_api.Services
             var results = await GetCachedRealEstateDataAsync(city.ToString());
 
             var validOffers = GetValidOffers(results);
+            var validWithDistrict = validOffers
+                .Where(x => !string.IsNullOrWhiteSpace(x.Location?.District))
+                .ToList();
 
+            var districtGroups = validWithDistrict
+                .GroupBy(x => x.Location.District)
+                .Where(g => g.Count() >= MinOffersPerDistrict)
+                .ToList();
+
+            var districtMedians = districtGroups.ToDictionary(
+                g => g.Key,
+                g => CalculateMedian(g.Select(x => x.PricePerMeter)));
+
+            var charts = BuildDashboardCharts(results, validOffers, timeline);
+            var insights = BuildMarketInsights(results, validOffers, validWithDistrict, districtGroups, districtMedians);
+            var mapPoints = BuildMapPoints(results);
+
+            var dto = new FullDashboardDTO
+            {
+                Charts = charts,
+                Insights = insights,
+                MapPoints = mapPoints
+            };
+
+            _cache.Set(cacheKey, dto, new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = CacheDuration
+            });
+
+            return dto;
+        }
+
+        private static DashboardChartsDTO BuildDashboardCharts(List<SearchData> results, List<SearchData> validOffers, List<TimelineGroup> timeline)
+        {
             var dto = new DashboardChartsDTO
             {
                 Timeline = timeline
@@ -122,12 +144,144 @@ namespace AF_mobile_web_api.Services
                 dto.BuildingTypeSplit = BuildSplit(validOffers, x => x.BuildingType);
             }
 
-            _cache.Set(cacheKey, dto, new MemoryCacheEntryOptions
-            {
-                AbsoluteExpirationRelativeToNow = CacheDuration
-            });
-
             return dto;
+        }
+
+        private static MarketInsightsDTO BuildMarketInsights(
+            List<SearchData> results,
+            List<SearchData> validOffers,
+            List<SearchData> validWithDistrict,
+            List<IGrouping<string, SearchData>> districtGroups,
+            Dictionary<string, double> districtMedians)
+        {
+            // no valid offers -> Min()/Max() below would throw and results.Count would divide by zero
+            if (validOffers.Count == 0)
+                return new MarketInsightsDTO();
+
+            var pricesPerMeter = validOffers.Select(x => x.PricePerMeter).ToList();
+
+            var insights = new MarketInsightsDTO
+            {
+                TotalOffers = results.Count,
+                MedianPrice = Math.Round(CalculateMedian(validOffers.Select(x => x.Price)), 0),
+                MedianPricePerMeter = Math.Round(CalculateMedian(pricesPerMeter), 0),
+                MinPricePerMeter = Math.Round(pricesPerMeter.Min(), 0),
+                MaxPricePerMeter = Math.Round(pricesPerMeter.Max(), 0),
+                MedianArea = Math.Round(CalculateMedian(validOffers.Select(x => x.Area)), 1),
+                PrivateOffersPercent = Math.Round(100.0 * results.Count(x => x.Private) / results.Count, 1),
+                OffersBySource = results
+                    .GroupBy(x => x.WebName)
+                    .Select(g => new SourceCountDTO { Source = g.Key.ToString(), Count = g.Count() })
+                    .OrderByDescending(x => x.Count)
+                    .ToList()
+            };
+
+            insights.Districts = districtGroups
+                .Select(g => new DistrictPriceDTO
+                {
+                    District = g.Key,
+                    MedianPricePerMeter = Math.Round(districtMedians[g.Key], 0),
+                    Count = g.Count()
+                })
+                .OrderBy(x => x.MedianPricePerMeter)
+                .ToList();
+
+            insights.BestDeals = districtGroups
+                .SelectMany(g => g)
+                .Select(x => new BestDealDTO
+                {
+                    Title = x.Title,
+                    Url = x.Url,
+                    District = x.Location.District,
+                    Price = x.Price,
+                    Area = x.Area,
+                    Floor = x.Floor,
+                    Market = x.Market,
+                    PricePerMeter = Math.Round(x.PricePerMeter, 0),
+                    DistrictMedianPricePerMeter = Math.Round(districtMedians[x.Location.District], 0),
+                    BelowMedianPercent = Math.Round(
+                        100.0 * (districtMedians[x.Location.District] - x.PricePerMeter) / districtMedians[x.Location.District], 1),
+                    Source = x.WebName.ToString()
+                })
+                .Where(d => d.BelowMedianPercent > 0 && d.BelowMedianPercent <= MaxBelowMedianPercent)
+                .GroupBy(d => new { d.Price, d.Area, d.Floor }) // same offer posted on several portals
+                .Select(g => g.First())
+                .OrderByDescending(d => d.BelowMedianPercent)
+                .Take(10)
+                .ToList();
+
+            return insights;
+        }
+
+        private static List<MapPointDTO> BuildMapPoints(List<SearchData> results)
+        {
+            var points = results
+                .Where(x => x.Location != null && x.Location.Lat != 0 && x.Location.Lon != 0)
+                .Select(x => new MapPointDTO
+                {
+                    Url = x.Url,
+                    Title = x.Title,
+                    Price = x.Price,
+                    PricePerMeter = x.PricePerMeter,
+                    Floor = x.Floor,
+                    Market = x.Market,
+                    BuildingType = x.BuildingType,
+                    Area = x.Area,
+                    Private = x.Private,
+                    Location = new MapLocationDTO
+                    {
+                        Lat = x.Location.Lat,
+                        Lon = x.Location.Lon,
+                        District = x.Location.District
+                    }
+                })
+                .ToList();
+
+            if (points.Count == 0)
+                return points;
+
+            var values = points.Select(p => p.PricePerMeter).Where(v => v > 0).ToList();
+            if (values.Count == 0)
+                return points;
+
+            var minVal = values.Min();
+            var maxVal = values.Max();
+            var range = maxVal - minVal;
+
+            foreach (var p in points)
+            {
+                // clamp: offers with PricePerMeter <= 0 pass the coords filter but sit below minVal
+                var ratio = Math.Clamp(range > 0 ? (p.PricePerMeter - minVal) / range : 0.5, 0, 1);
+                var r = (int)(255 * ratio);
+                var b = (int)(255 * (1 - ratio));
+                p.Color = $"rgb({r},0,{b})";
+            }
+
+            return points;
+        }
+
+        public async Task<List<TimelinePriceDTO>> GetTimelinePrice(string cityName)
+        {
+            var city = ParseCity(cityName);
+
+            // grouped and sorted in SQL - avoids loading every property row into memory
+            var groupedData = await _propertyDataRepository.GetTimelineByCityAsync(city.ToString());
+
+            return groupedData
+                .Select(x => new TimelinePriceDTO
+                {
+                    AddedDate = x.Date.ToString("dd-MM-yyyy"),
+                    AvgPrice = Math.Round(x.AvgPrice, 1),
+                    AvgPricePerMeter = Math.Round(x.AvgPricePerMeter, 1),
+                    Count = x.Count
+                })
+                .ToList();
+        }
+
+        // Thin wrapper kept for API compatibility - the app itself calls getFullDashboard.
+        public async Task<DashboardChartsDTO> GetDashboardCharts(string cityName)
+        {
+            return (await GetFullDashboardDataAsync(cityName)).Charts;
         }
 
         private static List<HistogramBinDTO> BuildPricePerMeterHistogram(List<SearchData> validOffers)
@@ -195,139 +349,16 @@ namespace AF_mobile_web_api.Services
                 .ToList();
         }
 
+        // Thin wrapper kept for API compatibility - the app itself calls getFullDashboard.
         public async Task<MarketInsightsDTO> GetMarketInsights(string cityName)
         {
-            if (string.IsNullOrWhiteSpace(cityName))
-                throw new ArgumentException("City name cannot be null or empty", nameof(cityName));
-
-            if (!Enum.TryParse<CityEnum>(cityName, true, out CityEnum city))
-                throw new ArgumentException($"Invalid city name: {cityName}. Valid cities: {string.Join(", ", Enum.GetNames<CityEnum>())}");
-
-            var cacheKey = $"MarketInsights_{city}";
-            if (_cache.TryGetValue(cacheKey, out MarketInsightsDTO cached))
-            {
-                return cached;
-            }
-
-            var results = await GetCachedRealEstateDataAsync(city.ToString());
-
-            var validOffers = GetValidOffers(results);
-
-            if (!validOffers.Any())
-                return new MarketInsightsDTO();
-
-            var pricesPerMeter = validOffers.Select(x => x.PricePerMeter).ToList();
-
-            var insights = new MarketInsightsDTO
-            {
-                TotalOffers = results.Count,
-                MedianPrice = Math.Round(CalculateMedian(validOffers.Select(x => x.Price)), 0),
-                MedianPricePerMeter = Math.Round(CalculateMedian(pricesPerMeter), 0),
-                MinPricePerMeter = Math.Round(pricesPerMeter.Min(), 0),
-                MaxPricePerMeter = Math.Round(pricesPerMeter.Max(), 0),
-                MedianArea = Math.Round(CalculateMedian(validOffers.Select(x => x.Area)), 1),
-                PrivateOffersPercent = Math.Round(100.0 * results.Count(x => x.Private) / results.Count, 1),
-                OffersBySource = results
-                    .GroupBy(x => x.WebName)
-                    .Select(g => new SourceCountDTO { Source = g.Key.ToString(), Count = g.Count() })
-                    .OrderByDescending(x => x.Count)
-                    .ToList()
-            };
-
-            var districtGroups = GroupByDistrict(validOffers);
-
-            var districtMedians = districtGroups.ToDictionary(
-                g => g.Key,
-                g => CalculateMedian(g.Select(x => x.PricePerMeter)));
-
-            insights.Districts = districtGroups
-                .Select(g => new DistrictPriceDTO
-                {
-                    District = g.Key,
-                    MedianPricePerMeter = Math.Round(districtMedians[g.Key], 0),
-                    Count = g.Count()
-                })
-                .OrderBy(x => x.MedianPricePerMeter)
-                .ToList();
-
-            insights.BestDeals = districtGroups
-                .SelectMany(g => g)
-                .Select(x => new BestDealDTO
-                {
-                    Title = x.Title,
-                    Url = x.Url,
-                    District = x.Location.District,
-                    Price = x.Price,
-                    Area = x.Area,
-                    Floor = x.Floor,
-                    Market = x.Market,
-                    PricePerMeter = Math.Round(x.PricePerMeter, 0),
-                    DistrictMedianPricePerMeter = Math.Round(districtMedians[x.Location.District], 0),
-                    BelowMedianPercent = Math.Round(
-                        100.0 * (districtMedians[x.Location.District] - x.PricePerMeter) / districtMedians[x.Location.District], 1),
-                    Source = x.WebName.ToString()
-                })
-                .Where(d => d.BelowMedianPercent > 0)
-                .GroupBy(d => new { d.Price, d.Area, d.Floor }) // same offer posted on several portals
-                .Select(g => g.First())
-                .OrderByDescending(d => d.BelowMedianPercent)
-                .Take(10)
-                .ToList();
-
-            _cache.Set(cacheKey, insights, new MemoryCacheEntryOptions
-            {
-                AbsoluteExpirationRelativeToNow = CacheDuration
-            });
-
-            return insights;
+            return (await GetFullDashboardDataAsync(cityName)).Insights;
         }
 
+        // Thin wrapper kept for API compatibility - the app itself calls getFullDashboard.
         public async Task<List<MapPointDTO>> GetMapPoints(string cityName)
         {
-            if (string.IsNullOrWhiteSpace(cityName))
-                throw new ArgumentException("City name cannot be null or empty", nameof(cityName));
-
-            if (!Enum.TryParse<CityEnum>(cityName, true, out CityEnum city))
-                throw new ArgumentException($"Invalid city name: {cityName}. Valid cities: {string.Join(", ", Enum.GetNames<CityEnum>())}");
-
-            var cacheKey = $"MapPoints_{city}";
-            if (_cache.TryGetValue(cacheKey, out List<MapPointDTO> cached))
-            {
-                return cached;
-            }
-
-            var results = await GetCachedRealEstateDataAsync(city.ToString());
-
-            // Only offers with real coordinates get plotted; project to the slim shape so
-            // Description/Photos and other unused fields never leave the server.
-            var points = results
-                .Where(x => x.Location != null && x.Location.Lat != 0 && x.Location.Lon != 0)
-                .Select(x => new MapPointDTO
-                {
-                    Url = x.Url,
-                    Title = x.Title,
-                    Price = x.Price,
-                    PricePerMeter = x.PricePerMeter,
-                    Floor = x.Floor,
-                    Market = x.Market,
-                    BuildingType = x.BuildingType,
-                    Area = x.Area,
-                    Private = x.Private,
-                    Location = new MapLocationDTO
-                    {
-                        Lat = x.Location.Lat,
-                        Lon = x.Location.Lon,
-                        District = x.Location.District
-                    }
-                })
-                .ToList();
-
-            _cache.Set(cacheKey, points, new MemoryCacheEntryOptions
-            {
-                AbsoluteExpirationRelativeToNow = CacheDuration
-            });
-
-            return points;
+            return (await GetFullDashboardDataAsync(cityName)).MapPoints;
         }
 
         private static double CalculateMedian(IEnumerable<double> values)
@@ -352,6 +383,11 @@ namespace AF_mobile_web_api.Services
 
         private RealEstateStatistics CalculateStatistics(List<SearchData> data)
         {
+            // Average() throws InvalidOperationException on an empty list - an empty DB result
+            // should surface as zeroed statistics, not HTTP 500.
+            if (data == null || data.Count == 0)
+                return new RealEstateStatistics();
+
             var stats = new RealEstateStatistics
             {
                 MedianPricePerMeter = CalculateMedianPricePerMeter(data),
@@ -408,6 +444,11 @@ namespace AF_mobile_web_api.Services
 
         private RealEstateStatistics DisplayStatistics(List<SearchData> data)
         {
+            // Average() throws InvalidOperationException on an empty list - an empty DB result
+            // should surface as zeroed statistics, not HTTP 500.
+            if (data == null || data.Count == 0)
+                return new RealEstateStatistics();
+
             return new RealEstateStatistics
             {
                 MedianPricePerMeter = CalculateMedianPricePerMeter(data),
@@ -452,7 +493,11 @@ namespace AF_mobile_web_api.Services
 
         public async Task<ChartData> GetBarChartData(string city, string groupedBy)
         {
-            var results = await GetCachedRealEstateDataAsync(city);
+            // Canonicalize before caching: the raw string becomes an IMemoryCache key, so any
+            // garbage/differently-cased value would add a permanent cache entry plus a DB query.
+            var parsedCity = ParseCity(city);
+
+            var results = await GetCachedRealEstateDataAsync(parsedCity.ToString());
             return GetBarChartDataByBuildingType(results, groupedBy);
 
         }
@@ -616,7 +661,11 @@ namespace AF_mobile_web_api.Services
 
         public async Task<ChartData> FilterByParameter(string groupBy, string city, string parameter)
         {
-            var results = await GetCachedRealEstateDataAsync(city);
+            // Canonicalize before caching: the raw string becomes an IMemoryCache key, so any
+            // garbage/differently-cased value would add a permanent cache entry plus a DB query.
+            var parsedCity = ParseCity(city);
+
+            var results = await GetCachedRealEstateDataAsync(parsedCity.ToString());
 
             var groupedStats = GetDataWithGroupStatistics(results, groupBy);
             var fullChart = BuildChartData(groupedStats);
