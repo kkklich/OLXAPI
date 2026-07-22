@@ -18,8 +18,16 @@ namespace AF_mobile_web_api.Repositories
             _cache = cache;
         }
 
-        // Returns the offers from the most recent scrape (the batch with the newest AddedRecordTime).
+        // Returns the offers from the most recent scrape (the latest scrape day).
         // This is the "current market" snapshot the dashboard charts, insights and map render.
+        //
+        // We select by calendar day, not by an exact AddedRecordTime match: the rows of a
+        // single scrape are not guaranteed to share one timestamp. Historical data was stamped
+        // with a per-row DateTime.UtcNow, so each offer has a distinct microsecond value (e.g.
+        // Katowice's newest scrape holds ~5800 rows spread over ~11:36:28.0092xx). Matching the
+        // exact MAX(AddedRecordTime) then returns a single row - the reason the dashboard showed
+        // "1 active offer". Grouping by day mirrors GetTimelineByCityAsync and, with weekly
+        // scrapes, cleanly isolates the latest run.
         public async Task<List<PropertyData>> GetLatestByCityAsync(string city)
         {
             var latestBatch = await _dbSet
@@ -29,8 +37,11 @@ namespace AF_mobile_web_api.Repositories
             if (latestBatch == null)
                 return new List<PropertyData>();
 
+            var dayStart = latestBatch.Value.Date;
+            var dayEnd = dayStart.AddDays(1);
+
             return await _dbSet
-                .Where(p => p.City == city && p.AddedRecordTime == latestBatch)
+                .Where(p => p.City == city && p.AddedRecordTime >= dayStart && p.AddedRecordTime < dayEnd)
                 .ToListAsync();
         }
 
