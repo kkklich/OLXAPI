@@ -198,8 +198,10 @@ namespace AF_mobile_web_api.Services
                 searchData.Title = property["title"]?.Value<string>() ?? property["advertisementText"]?.Value<string>();
 
                 // Price information
+                // JSON nulls arrive as JValue(Null), which passes a reference null-check but
+                // throws on child access - hence the JTokenType.Object guards below.
                 var priceElement = property["price"];
-                if (priceElement != null)
+                if (priceElement != null && priceElement.Type == JTokenType.Object)
                 {
                     var amountString = priceElement["amount"]?.Value<string>();
                     if (double.TryParse(amountString, NumberStyles.Any, CultureInfo.InvariantCulture, out var price))
@@ -209,7 +211,7 @@ namespace AF_mobile_web_api.Services
                 }
 
                 var priceM2Element = property["priceM2"];
-                if (priceM2Element != null)
+                if (priceM2Element != null && priceM2Element.Type == JTokenType.Object)
                 {
                     var amountM2String = priceM2Element["amount"]?.Value<string>();
                     if (double.TryParse(amountM2String, NumberStyles.Any, CultureInfo.InvariantCulture, out var pricePerMeter))
@@ -252,11 +254,11 @@ namespace AF_mobile_web_api.Services
             var location = new LocationPlace();
 
             var locationElement = property["location"];
-            if (locationElement != null)
+            if (locationElement != null && locationElement.Type == JTokenType.Object)
             {
                 // Extract coordinates
                 var coordinatesElement = locationElement["coordinates"];
-                if (coordinatesElement != null)
+                if (coordinatesElement != null && coordinatesElement.Type == JTokenType.Object)
                 {
                     var latString = coordinatesElement["lat"]?.Value<string>();
                     if (double.TryParse(latString, NumberStyles.Any, CultureInfo.InvariantCulture, out var lat))
@@ -313,7 +315,7 @@ namespace AF_mobile_web_api.Services
 
         private bool DetermineIfPrivate(JToken contact)
         {
-            if (contact == null || contact.Type == JTokenType.Null || contact.Type == JTokenType.Undefined)
+            if (contact == null || contact.Type != JTokenType.Object)
                 return false;
 
             var company = contact["company"];
