@@ -22,7 +22,7 @@ namespace AF_mobile_web_api.Services
         public async Task<MarketplaceSearch> GetAllPagesAsync(CityEnum city = CityEnum.Krakow)
         {
             int minPriceStart = 150000;
-            int maxPriceEnd = 1000000;
+            int maxPriceEnd = 10000000;
             int step = 3000;
             // The portal serves each city from its own subdomain; a hardcoded "krakow." here
             // would silently return Krakow-area results for every other CityEnum value.
