@@ -25,7 +25,7 @@ namespace AF_mobile_web_api.Services
 
             // Define price ranges to cover 100,000 to 1,000,000 PLN
             int minPrice = 100000;
-            int maxPrice = 1000000;
+            int maxPrice = 10000000;
             int priceStep = 5000;
 
             var contexts = new List<FetchContext>();

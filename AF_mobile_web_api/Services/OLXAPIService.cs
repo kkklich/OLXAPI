@@ -153,7 +153,7 @@ namespace AF_mobile_web_api.Services
                 regionId: city.ToEncodedRegionOLXString(),
                 cityId: city.ToEncodedOLXString(),
                 priceFrom: 50_000,
-                priceTo: 999_000              
+                priceTo: 10_000_000              
             );
             
             searchedData.Data.AddRange(results);            
