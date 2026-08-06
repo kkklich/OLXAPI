@@ -288,21 +288,35 @@ namespace AF_mobile_web_api.Services
         {
             const double binSize = 1000;
 
-            // clip to 1st-99th percentile so scraper outliers don't stretch the axis
+            // Clip to the 1st-99th percentile so scraper outliers don't stretch the axis, then widen
+            // the cut to whole bins. Cutting at the raw percentile splits the bin it lands in, and
+            // that half-bin is still drawn full width - the old cut showed 4 offers in the first bar
+            // where the data held 33. Bins run (end - binSize, end], so the boundaries come from the
+            // bins the two percentile values fall in, not from rounding the values themselves.
             var sorted = validOffers.Select(x => x.PricePerMeter).OrderBy(x => x).ToList();
-            var low = sorted[(int)(sorted.Count * 0.01)];
-            var high = sorted[Math.Min(sorted.Count - 1, (int)(sorted.Count * 0.99))];
+            var low = (Math.Ceiling(sorted[(int)(sorted.Count * 0.01)] / binSize) * binSize) - binSize;
+            var high = Math.Ceiling(sorted[Math.Min(sorted.Count - 1, (int)(sorted.Count * 0.99))] / binSize) * binSize;
 
-            var bins = sorted
-                .Where(p => p >= low && p <= high)
+            var counts = sorted
+                .Where(p => p > low && p <= high)
                 .GroupBy(p => Math.Ceiling(p / binSize) * binSize)
-                .OrderBy(g => g.Key)
-                .Select(g => new HistogramBinDTO
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            // Emit every bin across the range, empty ones included: grouping alone omits bins nobody
+            // priced into, and the category axis then closes the gap - drawing a hole in the
+            // distribution as if the neighbouring price ranges were adjacent.
+            var binCount = (int)Math.Round((high - low) / binSize);
+            var bins = new List<HistogramBinDTO>(binCount);
+
+            for (var i = 1; i <= binCount; i++)
+            {
+                var binEnd = low + (i * binSize);
+                bins.Add(new HistogramBinDTO
                 {
-                    Label = $"{(g.Key - binSize) / 1000:0.#}-{g.Key / 1000:0.#}k",
-                    Count = g.Count()
-                })
-                .ToList();
+                    Label = $"{(binEnd - binSize) / 1000:0.#}-{binEnd / 1000:0.#}k",
+                    Count = counts.TryGetValue(binEnd, out var count) ? count : 0
+                });
+            }
 
             return bins;
         }
