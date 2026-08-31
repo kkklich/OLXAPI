@@ -4,7 +4,7 @@
       "Default": "Warning"
     },
     "GELF": {
-      "Host": "195.150.13.214",
+      "Host": "YOUR_GELF_HOST",
       "LogSource": "AFMULTISELECTOR",
       "LogLevel": {
         "Default": "Warning"
@@ -12,7 +12,7 @@
     }
   },
   "ConnectionStrings": {
-    "ConnectionString": "server=krzysztofklich.pl;database=nlddzucmzp_OLXAPI;user=nlddzucmzp_krzysztof;password=RmoOle4T52csHng!@#;"
+    "ConnectionString": "server=YOUR_DB_HOST;database=YOUR_DB_NAME;user=YOUR_DB_USER;password=YOUR_DB_PASSWORD;"
   },
   "AllowedOrigins": {
     "Frontend": "http://localhost:4200"
