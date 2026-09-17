@@ -19,6 +19,7 @@ namespace AF_mobile_web_api.Services
         private readonly IMapper _mapper;
         private readonly IPropertyDataRepository _propertyDataRepository;
         private readonly IMemoryCache _cache;
+        private readonly IOfferSnapshotCache _offers;
         private readonly ILogger<RealEstateServices> _logger;
 
         public RealEstateServices(
@@ -28,6 +29,7 @@ namespace AF_mobile_web_api.Services
             IMapper mapper,
             IPropertyDataRepository propertyDataRepository,
             IMemoryCache cache,
+            IOfferSnapshotCache offers,
             ILogger<RealEstateServices> logger)
         {
             _olxApiService = olxApiService;
@@ -36,6 +38,7 @@ namespace AF_mobile_web_api.Services
             _mapper = mapper;
             _propertyDataRepository = propertyDataRepository;
             _cache = cache;
+            _offers = offers;
             _logger = logger;
         }
 
@@ -108,6 +111,10 @@ namespace AF_mobile_web_api.Services
             _cache.Remove($"RealEstateData_{city}");
             _cache.Remove($"FullDashboard_{city}");
             _cache.Remove($"PriceDrops_{city}");
+
+            // The offers list is served from a deduplicated snapshot of every city at once,
+            // so it is rebuilt as a whole - the rows just saved are new newest-snapshots.
+            _offers.Invalidate();
 
             return combinedData;
         }

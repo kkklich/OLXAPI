@@ -43,7 +43,23 @@ dotnet ef database update --project ApplicationDatabase --startup-project AF_mob
 
 In production, supply all of these as environment variables
 (`ConnectionStrings__ConnectionString`, `ScrapeApiKey`, …) rather than editing
-the JSON files.
+the JSON files. This is not optional on a container host: `appsettings.Production.json`
+is gitignored, so an image built from a clone of this repo does **not** contain
+it and falls back to `appsettings.json` — whose `localhost` MySQL does not exist
+inside the container. The symptom is every DB-backed endpoint returning 500 with
+`Unable to connect to any of the specified MySQL hosts`, while the deploy itself
+reports success.
+
+Values in use today (Render):
+
+```
+ConnectionStrings__ConnectionString=server=93.157.102.234;database=nlddzucmzp_OLXAPI;user=…;password=…;
+AllowedOrigins__Frontend=https://cf9fdf5ccf7d71a61b2548.cyberfolks.host
+```
+
+The database host must be the IP: `krzysztofklich.pl` has no DNS record any more,
+and `AllowedOrigins__Frontend` is scheme + host only — a path or trailing slash
+never matches an `Origin` header.
 
 > ⚠️ `appsettings.Development.json` currently holds a **real database password**
 > and it is in this repository's git history. Rotate it and purge the history
@@ -70,6 +86,22 @@ triggers, which require an `X-Api-Key` header once `ScrapeApiKey` is set.
 | `getRealEstate/{city}`, `getUniqueOffers`, `RealEstateStats`, `RealEstateGropuBy` | older endpoints, kept for compatibility |
 
 `{city}` is a `CityEnum` name — currently `Krakow` or `Katowice`.
+
+### Health
+
+Outside `/api/RealEstate`, on `/api/Health`. EF opens its connection lazily on
+the first query, so a bad connection string still starts cleanly and passes a
+port-based probe — these make that visible straight after a deploy.
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/Health` | `{"status":"ok"}` — the process is up. Says nothing about the database |
+| `GET /api/Health/db` | opens a real connection: 200 when reachable, 503 when not |
+
+`/api/Health/db` deliberately returns no host, credentials or driver text — it is
+public whenever `ScrapeApiKey` is unset. Those details go to the log, including
+the host that was actually tried, which is the one thing the driver's own error
+message leaves out.
 
 ### Scrape triggers
 
