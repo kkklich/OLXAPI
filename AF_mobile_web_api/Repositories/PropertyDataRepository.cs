@@ -192,6 +192,105 @@ namespace AF_mobile_web_api.Repositories
                 .ToListAsync();
         }
 
+        // Offers whose price fell from the previous scrape to the newest one.
+        //
+        // Weekly scrapes make "the previous price" simply the offer's price on the
+        // previous scrape day, so instead of grouping over the whole per-Url history
+        // (a plan heavy enough to time out on this table), we pull just two bounded
+        // single-day slices - the latest scrape day and the one before it - and diff
+        // them by Url in memory. Each slice is one indexed range scan; the join is a
+        // few thousand rows. An offer that skipped last week's scrape simply has no
+        // "previous" and is left out, which is the right behaviour for a weekly card.
+        public async Task<List<PriceDropDTO>> GetPriceDropsAsync(string city, int limit)
+        {
+            var latestBatch = await _dbSet
+                .Where(p => p.City == city)
+                .MaxAsync(p => (DateTime?)p.AddedRecordTime);
+
+            if (latestBatch == null)
+                return new List<PriceDropDTO>();
+
+            var dayStart = latestBatch.Value.Date;
+            var dayEnd = dayStart.AddDays(1);
+
+            // The scrape day immediately before the latest one - the baseline to diff against.
+            var prevBatch = await _dbSet
+                .Where(p => p.City == city && p.AddedRecordTime < dayStart)
+                .MaxAsync(p => (DateTime?)p.AddedRecordTime);
+
+            if (prevBatch == null)
+                return new List<PriceDropDTO>();
+
+            var prevStart = prevBatch.Value.Date;
+            var prevEnd = prevStart.AddDays(1);
+
+            // Project only the columns the diff needs: full rows drag the Description
+            // longtext (and other unused columns) of ~6k offers per day over the wire,
+            // which made the uncached request ~25-40% slower. (Diffing in SQL is far slower -
+            // MySQL joins the longtext Urls of the two slices poorly, ~20s - and fetching
+            // display columns in a second by-Id query for the top drops only didn't pay off.)
+            var currentDay = await _dbSet
+                .Where(p => p.City == city && p.Price > 0
+                    && p.AddedRecordTime >= dayStart && p.AddedRecordTime < dayEnd)
+                .Select(p => new
+                {
+                    p.Url,
+                    p.Title,
+                    p.District,
+                    p.Area,
+                    p.WebName,
+                    p.Price,
+                    p.PricePerMeter,
+                    p.AddedRecordTime
+                })
+                .ToListAsync();
+
+            var previousDay = await _dbSet
+                .Where(p => p.City == city && p.Price > 0
+                    && p.AddedRecordTime >= prevStart && p.AddedRecordTime < prevEnd)
+                .Select(p => new { p.Url, p.Price })
+                .ToListAsync();
+
+            // Previous price per Url (an offer lists once per portal per scrape; if a Url
+            // somehow repeats within the day, the highest earlier price is the baseline).
+            var previousPriceByUrl = previousDay
+                .GroupBy(p => p.Url)
+                .ToDictionary(g => g.Key, g => g.Max(p => p.Price));
+
+            var drops = new List<PriceDropDTO>();
+            foreach (var current in currentDay)
+            {
+                if (!previousPriceByUrl.TryGetValue(current.Url, out var previousPrice))
+                    continue;
+                if (previousPrice <= current.Price)
+                    continue;
+
+                drops.Add(new PriceDropDTO
+                {
+                    Url = current.Url,
+                    Title = current.Title,
+                    City = city,
+                    District = current.District,
+                    Area = current.Area,
+                    WebName = current.WebName,
+                    CurrentPrice = current.Price,
+                    PreviousPrice = previousPrice,
+                    CurrentPricePerMeter = current.PricePerMeter,
+                    LastSeen = current.AddedRecordTime,
+                    PreviousSeen = prevBatch.Value
+                });
+            }
+
+            // De-duplicate Urls that appear more than once in the latest day (keep the
+            // biggest drop), then rank by relative drop.
+            return drops
+                .GroupBy(d => d.Url)
+                .Select(g => g.OrderByDescending(d => d.DropPercent).First())
+                .OrderByDescending(d => d.DropPercent)
+                .Take(limit)
+                .ToList();
+        }
+
         private static IOrderedQueryable<PropertyData> ApplySort(IQueryable<PropertyData> q, string? sortBy, string? sortDir)
         {
             var desc = !string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase);
