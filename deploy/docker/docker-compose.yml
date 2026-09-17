@@ -1,0 +1,75 @@
+# Docker alternative to the systemd setup. Pick ONE - running both means two
+# processes fighting over ports 4000 and 5016.
+#
+# Run from this directory on the VPS:
+#   docker compose up -d --build
+#
+# nginx still terminates TLS on the host and proxies to the published loopback
+# ports, exactly as in deploy/nginx/realestate.conf. Nothing there changes.
+
+services:
+  api:
+    build:
+      # deploy/ lives inside the API repo, so ../.. is that repo's root.
+      context: ../..
+      dockerfile: dockerfile
+    image: realestate-api
+    container_name: realestate-api
+    restart: unless-stopped
+    # Secrets stay outside the image and outside git.
+    env_file:
+      - /etc/realestate/api.env
+    environment:
+      # OLXAPI/dockerfile sets ASPNETCORE_URLS=http://+:$PORT, which does not
+      # expand at build time and ends up empty. Harmless - Program.cs calls
+      # UseUrls($"http://*:{PORT}") itself - but set it explicitly so the
+      # intent is visible.
+      ASPNETCORE_URLS: http://+:5016
+      PORT: "5016"
+    # Loopback only: the host firewall opens 22/80/443 and nothing else.
+    ports:
+      - "127.0.0.1:5016:5016"
+
+  web:
+    build:
+      # The frontend is a separate repository, assumed to be cloned beside the
+      # API one. Adjust both paths together if yours lives somewhere else.
+      context: ../../../real-estate-app
+      # Read from outside the build context - supported by Compose v2/BuildKit.
+      # If your Docker is older and rejects this, copy Dockerfile.web to
+      # real-estate-app/Dockerfile and drop this line.
+      dockerfile: ../OLXAPI/deploy/docker/Dockerfile.web
+      args:
+        # Must match the nginx layout: "/" for the domain root.
+        BASE_HREF: /
+    image: realestate-web
+    container_name: realestate-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+    ports:
+      - "127.0.0.1:4000:4000"
+    depends_on:
+      - api
+
+# Optionally run MySQL here too instead of on cyberFolks. If you enable this,
+# point ConnectionStrings__ConnectionString at "server=db;..." and put api on
+# the same network.
+#
+#  db:
+#    image: mariadb:11
+#    container_name: realestate-db
+#    restart: unless-stopped
+#    environment:
+#      MARIADB_DATABASE: olxapi
+#      MARIADB_USER: olxapi
+#      MARIADB_PASSWORD: CHANGE_ME
+#      MARIADB_ROOT_PASSWORD: CHANGE_ME_TOO
+#    volumes:
+#      - dbdata:/var/lib/mysql
+#    ports:
+#      - "127.0.0.1:3306:3306"
+#
+# volumes:
+#   dbdata:

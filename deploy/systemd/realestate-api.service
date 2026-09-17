@@ -1,0 +1,44 @@
+[Unit]
+Description=Real Estate API (.NET / AF_mobile_web_api)
+Documentation=https://github.com/kkklich/OLXAPI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Program.cs does not call UseSystemd(), so this is a plain forking-free service.
+Type=simple
+User=realestate
+Group=realestate
+WorkingDirectory=/opt/realestate/api/current
+ExecStart=/usr/bin/dotnet /opt/realestate/api/current/AF_mobile_web_api.dll
+
+# Secrets and the connection string live here, mode 0600, never in git.
+EnvironmentFile=/etc/realestate/api.env
+Environment=DOTNET_NOLOGO=1
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+
+# SIGINT is what ASP.NET Core listens for to shut down gracefully.
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+Restart=always
+RestartSec=10
+
+SyslogIdentifier=realestate-api
+
+# --- hardening -------------------------------------------------------------
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+# The app writes nothing outside its own tree; grant nothing extra.
+ReadWritePaths=/opt/realestate/api
+
+[Install]
+WantedBy=multi-user.target
