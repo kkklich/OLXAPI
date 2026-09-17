@@ -74,7 +74,7 @@ triggers, which require an `X-Api-Key` header once `ScrapeApiKey` is set.
 
 | Endpoint | Returns |
 |---|---|
-| `getFullDashboard/{city}` | charts + insights + map points — everything the dashboard needs, one call |
+| `getFullDashboard/{city}` | charts + insights + map points — everything the dashboard needs, one call. `?includeMapPoints=false` leaves out the points, which are ~98% of the payload; the app uses that and fetches them from `getMapPoints` when a map is opened |
 | `properties?…` | paged, filterable, sortable list of distinct offers |
 | `propertyHistory/{city}?url=` | price history for one offer |
 | `getDashboardCharts/{city}` | the charts slice on its own |

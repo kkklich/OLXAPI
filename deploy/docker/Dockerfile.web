@@ -1,0 +1,41 @@
+# Angular 20 SSR bundle for the Real Estate App.
+# Build context is the real-estate-app/ directory.
+#
+#   docker build -f deploy/docker/Dockerfile.web -t realestate-web ./real-estate-app
+#
+# The API has its own Dockerfile at OLXAPI/dockerfile.
+
+# ---------- BUILD STAGE ----------
+FROM node:22-alpine AS build
+WORKDIR /src
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+
+# "/" when serving from the domain root, "/realestate/" for a sub-path.
+ARG BASE_HREF=/
+# Parallel workers exhaust the heap on this project; one worker is slower but
+# actually finishes.
+ENV NG_BUILD_MAX_WORKERS=1
+RUN npx ng build --configuration production --base-href "${BASE_HREF}"
+
+# ---------- RUNTIME STAGE ----------
+FROM node:22-alpine AS runtime
+WORKDIR /app
+
+# server.mjs resolves its static folder as "../browser", so this layout is not
+# optional - keep browser/ as a sibling of server/.
+COPY --from=build /src/dist/real-estate-app/browser ./browser
+COPY --from=build /src/dist/real-estate-app/server  ./server
+
+# No npm install here: the Angular build inlines Express and the Angular
+# runtime into server.mjs, so the runtime image needs no node_modules.
+
+ENV NODE_ENV=production
+ENV PORT=4000
+EXPOSE 4000
+
+USER node
+CMD ["node", "server/server.mjs"]
