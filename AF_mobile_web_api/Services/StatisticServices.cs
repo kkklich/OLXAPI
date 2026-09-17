@@ -63,14 +63,18 @@ namespace AF_mobile_web_api.Services
             return results;
         }
 
-        public async Task<FullDashboardDTO> GetFullDashboardDataAsync(string cityName)
+        // includeMapPoints = false returns the same dashboard without its map points. They
+        // are ~98% of the payload (1.7 MB of 1.76 MB for Krakow) and the page draws no map
+        // until the visitor asks for one, so the dashboard fetches them separately through
+        // getMapPoints/{city} - which is served from this very cache entry.
+        public async Task<FullDashboardDTO> GetFullDashboardDataAsync(string cityName, bool includeMapPoints = true)
         {
             var city = ParseCity(cityName);
 
             var cacheKey = $"FullDashboard_{city}";
             if (_cache.TryGetValue(cacheKey, out FullDashboardDTO cached))
             {
-                return cached;
+                return Shape(cached, includeMapPoints);
             }
 
             // Sequential, not concurrent: both calls share the same scoped DbContext,
@@ -108,8 +112,20 @@ namespace AF_mobile_web_api.Services
                 AbsoluteExpirationRelativeToNow = CacheDuration
             });
 
-            return dto;
+            return Shape(dto, includeMapPoints);
         }
+
+        // A view of the cached dashboard, not a copy of it: dropping the map points must
+        // leave the cached entry itself intact for getMapPoints to serve.
+        private static FullDashboardDTO Shape(FullDashboardDTO dashboard, bool includeMapPoints) =>
+            includeMapPoints
+                ? dashboard
+                : new FullDashboardDTO
+                {
+                    Charts = dashboard.Charts,
+                    Insights = dashboard.Insights,
+                    MapPoints = new List<MapPointDTO>()
+                };
 
         private static DashboardChartsDTO BuildDashboardCharts(List<SearchData> results, List<SearchData> validOffers, List<TimelineGroup> timeline)
         {

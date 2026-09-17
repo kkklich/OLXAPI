@@ -5,8 +5,10 @@ using AF_mobile_web_api.Repositories.Interfaces;
 using AF_mobile_web_api.Services;
 using AF_mobile_web_api.Services.Interfaces;
 using ApplicationDatabase;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using System;
+using System.IO.Compression;
 using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -50,6 +52,13 @@ builder.Services.AddScoped<IPropertyListService, PropertyListService>();
 // Singleton on purpose: it owns the "one scrape at a time" flag shared by all requests.
 builder.Services.AddSingleton<IScrapeJobRunner, ScrapeJobRunner>();
 
+// Singleton on purpose: the deduplicated offers set costs a full-table scan to build, so
+// every request shares one copy of it until a scrape replaces the rows it was built from.
+builder.Services.AddSingleton<IOfferSnapshotCache, OfferSnapshotCache>();
+
+// Builds the caches in the background at startup, so the first visitor after a restart
+// (on Render, that is every visitor after an idle period) does not pay for them.
+builder.Services.AddHostedService<CacheWarmupService>();
 
 builder.Services.AddMemoryCache();//TODO add redis cache for better performance and scalability
 
@@ -60,6 +69,13 @@ builder.Services.AddResponseCompression(options =>
     options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProvider>();
     options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProvider>();
 });
+
+// The default for both providers is CompressionLevel.Fastest, which on this API's biggest
+// response (the map points) spent its speed on nothing: Optimal compresses the same payload
+// to well under half the bytes for a few milliseconds more, and these responses are served
+// from cache, so the bytes on the wire are what the visitor actually waits for.
+builder.Services.Configure<BrotliCompressionProviderOptions>(options => options.Level = CompressionLevel.Optimal);
+builder.Services.Configure<GzipCompressionProviderOptions>(options => options.Level = CompressionLevel.Optimal);
 
 builder.Services.AddControllers();  
 
