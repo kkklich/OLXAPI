@@ -17,6 +17,6 @@ namespace AF_mobile_web_api.Services.Interfaces
         Task<List<PriceDropDTO>> GetPriceDrops(string cityName, int limit);
         Task<DashboardChartsDTO> GetDashboardCharts(string cityName);
         Task<List<MapPointDTO>> GetMapPoints(string cityName);
-        Task<FullDashboardDTO> GetFullDashboardDataAsync(string cityName);
+        Task<FullDashboardDTO> GetFullDashboardDataAsync(string cityName, bool includeMapPoints = true);
     }
 }

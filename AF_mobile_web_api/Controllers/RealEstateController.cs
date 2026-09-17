@@ -134,10 +134,13 @@ namespace AF_mobile_web_api.Controllers
             return Ok(result);
         }
 
+        // includeMapPoints=false leaves out the map points, which are ~98% of this payload
+        // and are only needed once the visitor opens a map; they are then fetched from
+        // getMapPoints/{city}, which shares this endpoint's cache entry.
         [HttpGet("getFullDashboard/{city}")]
-        public async Task<IActionResult> GetFullDashboard(string city)
+        public async Task<IActionResult> GetFullDashboard(string city, [FromQuery] bool includeMapPoints = true)
         {
-            var result = await _statisticServices.GetFullDashboardDataAsync(city);
+            var result = await _statisticServices.GetFullDashboardDataAsync(city, includeMapPoints);
             return Ok(result);
         }
 

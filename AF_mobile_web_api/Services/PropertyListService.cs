@@ -11,14 +11,19 @@ namespace AF_mobile_web_api.Services
     {
         private readonly IPropertyDataRepository _repo;
         private readonly IPropertyComparer _comparer;
+        private readonly IOfferSnapshotCache _offers;
 
-        public PropertyListService(IPropertyDataRepository repo, IPropertyComparer comparer)
+        public PropertyListService(IPropertyDataRepository repo, IPropertyComparer comparer, IOfferSnapshotCache offers)
         {
             _repo = repo;
             _comparer = comparer;
+            _offers = offers;
         }
 
-        public Task<PagedResultDTO<PropertyListItemDTO>> GetPagedAsync(PropertyQueryParams query)
+        // Filtering, sorting and paging happen over the in-memory offers snapshot; only the
+        // columns the page renders (Url, Title, FirstPrice) are read from the database, by
+        // primary key. See OfferQuery for why the query this replaced could not stay in SQL.
+        public async Task<PagedResultDTO<PropertyListItemDTO>> GetPagedAsync(PropertyQueryParams query)
         {
             // The DB stores scraped Polish market names, so the API's English aliases
             // must be translated before filtering; other values pass through so raw
@@ -32,7 +37,48 @@ namespace AF_mobile_web_api.Services
                 query.Market = "Wtórny";
             }
 
-            return _repo.GetPagedAsync(query);
+            var offers = await _offers.GetAsync();
+            var page = OfferQuery.Apply(offers, query);
+
+            var details = (await _repo.GetPageDetailsAsync(page.Items.Select(o => o.Id).ToList()))
+                .ToDictionary(d => d.Id);
+
+            var items = page.Items.Select(offer =>
+            {
+                details.TryGetValue(offer.Id, out var detail);
+
+                return new PropertyListItemDTO
+                {
+                    Id = offer.Id,
+                    Url = detail?.Url ?? string.Empty,
+                    Title = detail?.Title ?? string.Empty,
+                    Price = offer.Price,
+                    PricePerMeter = offer.PricePerMeter,
+                    Floor = offer.Floor,
+                    Market = offer.Market,
+                    BuildingType = offer.BuildingType,
+                    Area = offer.Area,
+                    Private = offer.Private,
+                    WebName = offer.WebName,
+                    City = offer.City,
+                    District = offer.District,
+                    LastSeen = offer.LastSeen,
+                    FirstSeen = offer.FirstSeen,
+                    SnapshotCount = offer.SnapshotCount,
+                    // No detail row means the offer vanished between the snapshot and now,
+                    // which only a reset database can do; its own price is the honest
+                    // "unchanged" answer, rather than a change measured against zero.
+                    FirstPrice = detail?.FirstPrice ?? offer.Price
+                };
+            }).ToList();
+
+            return new PagedResultDTO<PropertyListItemDTO>
+            {
+                Items = items,
+                TotalCount = page.TotalCount,
+                Page = page.Page,
+                PageSize = page.PageSize
+            };
         }
 
         public async Task<PropertyHistoryDTO?> GetHistoryAsync(string city, string url)
