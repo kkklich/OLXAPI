@@ -127,6 +127,13 @@ namespace AF_mobile_web_api.Controllers
             return Ok(result);
         }
 
+        [HttpGet("getPriceDrops/{city}")]
+        public async Task<IActionResult> GetPriceDrops(string city, [FromQuery] int limit = 20)
+        {
+            var result = await _statisticServices.GetPriceDrops(city, limit);
+            return Ok(result);
+        }
+
         [HttpGet("getFullDashboard/{city}")]
         public async Task<IActionResult> GetFullDashboard(string city)
         {

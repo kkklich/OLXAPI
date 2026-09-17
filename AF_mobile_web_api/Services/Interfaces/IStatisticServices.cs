@@ -14,6 +14,7 @@ namespace AF_mobile_web_api.Services.Interfaces
         Task<ChartData> GetBarChartData(string city, string groupedBy);
         Task<ChartData> FilterByParameter(string groupBy, string city, string parameter);
         Task<MarketInsightsDTO> GetMarketInsights(string cityName);
+        Task<List<PriceDropDTO>> GetPriceDrops(string cityName, int limit);
         Task<DashboardChartsDTO> GetDashboardCharts(string cityName);
         Task<List<MapPointDTO>> GetMapPoints(string cityName);
         Task<FullDashboardDTO> GetFullDashboardDataAsync(string cityName);

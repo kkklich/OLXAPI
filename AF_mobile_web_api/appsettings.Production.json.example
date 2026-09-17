@@ -1,0 +1,20 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Warning"
+    },
+    "GELF": {
+      "Host": "YOUR_GELF_HOST",
+      "LogSource": "AFMULTISELECTOR",
+      "LogLevel": {
+        "Default": "Warning"
+      }
+    }
+  },
+  "ConnectionStrings": {
+    "ConnectionString": "server=YOUR_DB_HOST;database=YOUR_DB_NAME;user=YOUR_DB_USER;password=YOUR_DB_PASSWORD;"
+  },
+  "AllowedOrigins": {
+    "Frontend": "http://localhost:4200"
+  }
+}
