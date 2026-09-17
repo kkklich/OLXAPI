@@ -1,0 +1,39 @@
+[Unit]
+Description=Real Estate App - Angular SSR (Node/Express)
+Documentation=https://github.com/kkklich/real-estate-app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=realestate
+Group=realestate
+
+# server.mjs resolves its static folder as "../browser" relative to itself, so
+# the release layout must stay <current>/server/server.mjs + <current>/browser/.
+WorkingDirectory=/opt/realestate/web/current
+ExecStart=/usr/bin/node /opt/realestate/web/current/server/server.mjs
+
+EnvironmentFile=/etc/realestate/web.env
+
+Restart=always
+RestartSec=10
+TimeoutStopSec=30
+
+SyslogIdentifier=realestate-ssr
+
+# --- hardening -------------------------------------------------------------
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+ReadWritePaths=/opt/realestate/web
+
+[Install]
+WantedBy=multi-user.target
