@@ -6,7 +6,7 @@
     }
   },
   "ConnectionStrings": {
-    "ConnectionString": "server=93.157.102.234;database=nlddzucmzp_OLXAPI;user=nlddzucmzp_krzysztof;password=RmoOle4T52csHng!@#;"
+    "ConnectionString": "server=YOUR_DB_HOST;database=YOUR_DB_NAME;user=YOUR_DB_USER;password=YOUR_DB_PASSWORD;"
   },
   "AllowedOrigins": {
     "Frontend": "http://localhost:4200"

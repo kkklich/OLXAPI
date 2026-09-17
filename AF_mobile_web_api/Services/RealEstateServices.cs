@@ -107,6 +107,7 @@ namespace AF_mobile_web_api.Services
             // dashboards pick up the freshly scraped batch instead of serving stale data.
             _cache.Remove($"RealEstateData_{city}");
             _cache.Remove($"FullDashboard_{city}");
+            _cache.Remove($"PriceDrops_{city}");
 
             return combinedData;
         }

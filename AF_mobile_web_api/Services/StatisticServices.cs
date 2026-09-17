@@ -375,6 +375,32 @@ namespace AF_mobile_web_api.Services
             return (await GetFullDashboardDataAsync(cityName)).MapPoints;
         }
 
+        // Offers whose price fell in the newest scrape versus the one before it.
+        // Cached per city like the other dashboard slices and evicted when a scrape
+        // lands (RealEstateServices removes PriceDrops_{city}).
+        // The biggest list any caller can ask for; cached once per city under a
+        // limit-independent key so a scrape can evict it, then sliced to the request.
+        private const int MaxPriceDrops = 200;
+
+        public async Task<List<PriceDropDTO>> GetPriceDrops(string cityName, int limit)
+        {
+            var city = ParseCity(cityName);
+            limit = Math.Clamp(limit, 1, MaxPriceDrops);
+
+            var cacheKey = $"PriceDrops_{city}";
+            if (!_cache.TryGetValue(cacheKey, out List<PriceDropDTO> drops))
+            {
+                drops = await _propertyDataRepository.GetPriceDropsAsync(city.ToString(), MaxPriceDrops);
+
+                _cache.Set(cacheKey, drops, new MemoryCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = CacheDuration
+                });
+            }
+
+            return drops.Take(limit).ToList();
+        }
+
         private static double CalculateMedian(IEnumerable<double> values)
         {
             var sorted = values.OrderBy(v => v).ToList();

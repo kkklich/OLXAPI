@@ -12,5 +12,6 @@ namespace AF_mobile_web_api.Repositories.Interfaces
         Task<PagedResultDTO<PropertyListItemDTO>> GetPagedAsync(PropertyQueryParams query);
         Task<List<PropertyData>> GetHistoryCandidatesAsync(string city, string url, double areaMin, double areaMax);
         Task<PropertyData?> GetLatestByUrlAsync(string city, string url);
+        Task<List<PriceDropDTO>> GetPriceDropsAsync(string city, int limit);
     }
 }

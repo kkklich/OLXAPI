@@ -6,6 +6,12 @@
 AF_mobile_web_api/bin/
 AF_mobile_web_api/obj/
 
+# Secrets live in these files (live DB connection string). Keep them out of
+# git; copy the *.example templates locally, or supply values via environment
+# variables (ConnectionStrings__ConnectionString), which override the JSON.
+AF_mobile_web_api/appsettings.Development.json
+AF_mobile_web_api/appsettings.Production.json
+
 
 AF_mobile_web_api/bin/Debug/net7.0/AF_mobile_web_api.dll
 AF_mobile_web_api/bin/Debug/net7.0/AF_mobile_web_api.exe
