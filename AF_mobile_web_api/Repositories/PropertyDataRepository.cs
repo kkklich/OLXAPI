@@ -146,13 +146,45 @@ namespace AF_mobile_web_api.Repositories
                 .FirstOrDefaultAsync();
         }
 
-        // Narrow candidate set for same-offer matching: rows of the same city whose Url
-        // matches exactly or whose area is close enough for the fuzzy comparer to decide.
-        public async Task<List<PropertyData>> GetHistoryCandidatesAsync(string city, string url, double areaMin, double areaMax)
+        // Narrow candidate set for same-offer matching: the rows of a city the comparer could
+        // accept - by Url, or by meeting its fuzzy rules' hard requirements. See
+        // HistoryCandidateFilter. The comparer still makes every decision; this only decides
+        // what is worth sending over the wire for it to look at.
+        public async Task<List<PropertyData>> GetHistoryCandidatesAsync(string city, HistoryCandidateFilter filter)
         {
-            return await _dbSet.AsNoTracking()
-                .Where(p => p.City == city && (p.Url == url || (p.Area >= areaMin && p.Area <= areaMax)))
-                .ToListAsync();
+            var rows = _dbSet.AsNoTracking().Where(p => p.City == city);
+
+            // LIKE rather than StartsWith: EF turns StartsWith into LEFT(Url, n) = @prefix,
+            // which copies a slice of the longtext out of every row the scan visits, while
+            // LIKE stops at the first character that differs. The prefix is not escaped on
+            // purpose - a '_' or '%' in it (both common in Urls) only widens the match, and
+            // the comparer rejects whatever does not normalize to the same Url. Backslash is
+            // the one character that must be escaped: it is LIKE's escape character, so left
+            // alone it would narrow the match instead.
+            var pattern = filter.UrlPrefix is null ? null : filter.UrlPrefix.Replace(@"\", @"\\") + "%";
+
+            if (filter.Fuzzy is { } fuzzy)
+            {
+                var (areaMin, areaMax, floor) = (fuzzy.AreaMin, fuzzy.AreaMax, fuzzy.Floor);
+                // Trimmed like the comparer's TextEquals; the collation already makes the SQL
+                // side case- and accent-insensitive, a superset of what the comparer accepts.
+                var market = fuzzy.Market.Trim();
+
+                rows = pattern is null
+                    ? rows.Where(p => p.Area >= areaMin && p.Area <= areaMax && p.Floor == floor && p.Market.Trim() == market)
+                    : rows.Where(p => EF.Functions.Like(p.Url, pattern)
+                        || (p.Area >= areaMin && p.Area <= areaMax && p.Floor == floor && p.Market.Trim() == market));
+            }
+            else if (pattern is not null)
+            {
+                rows = rows.Where(p => EF.Functions.Like(p.Url, pattern));
+            }
+            else
+            {
+                return new List<PropertyData>();
+            }
+
+            return await rows.ToListAsync();
         }
 
         // Offers whose price fell from the previous scrape to the newest one.
