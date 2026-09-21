@@ -227,7 +227,12 @@ namespace AF_mobile_web_api.Services
         }
 
         /// <summary>Trim, lowercase, strip query string, fragment and trailing slash.</summary>
-        private static string NormalizeUrl(string? url)
+        /// <remarks>
+        /// Public because PropertyListService pre-filters history candidates on it - as it
+        /// does on the fuzzy rules' floor, market and area requirements. Loosening either
+        /// rule here means widening that pre-filter too, or the new matches never arrive.
+        /// </remarks>
+        public static string NormalizeUrl(string? url)
         {
             if (string.IsNullOrWhiteSpace(url))
             {
