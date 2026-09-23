@@ -1,3 +1,4 @@
+using AF_mobile_web_api.Domain;
 using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.Repositories.Interfaces;
 using AF_mobile_web_api.Services.Interfaces;
@@ -89,21 +90,29 @@ namespace AF_mobile_web_api.Services
                 return null;
             }
 
-            // Pre-filter candidates by the comparer's ±2% area tolerance so the fuzzy
-            // match runs over a small set; a missing area widens the window to everything.
-            double areaMin, areaMax;
-            if (target.Area <= 0)
+            // Pre-filter candidates by what the comparer could accept, so it runs over - and
+            // the database sends - a small set: every row sharing the offer's normalized Url,
+            // plus the rows meeting the fuzzy rules' hard requirements (the same area, same
+            // floor, same market). Without floor and market a 50 m² Krakow offer pulled ~30k
+            // full rows to keep ~3k. An offer with no area cannot fuzzy-match at all, so it
+            // only needs its Url - this used to widen the window to every row of the city
+            // instead.
+            var urlPrefix = PropertyComparer.NormalizeUrl(target.Url);
+            var filter = new HistoryCandidateFilter
             {
-                areaMin = 0;
-                areaMax = double.MaxValue;
-            }
-            else
-            {
-                areaMin = target.Area * 0.98;
-                areaMax = target.Area * 1.02;
-            }
+                UrlPrefix = urlPrefix.Length > 0 ? urlPrefix : null,
+                Fuzzy = target.Area <= 0
+                    ? null
+                    : new FuzzyCandidateBand
+                    {
+                        AreaMin = target.Area - PropertyComparer.AreaEqualityToleranceMeters,
+                        AreaMax = target.Area + PropertyComparer.AreaEqualityToleranceMeters,
+                        Floor = target.Floor,
+                        Market = target.Market ?? string.Empty
+                    }
+            };
 
-            var candidates = await _repo.GetHistoryCandidatesAsync(city, url, areaMin, areaMax);
+            var candidates = await _repo.GetHistoryCandidatesAsync(city, filter);
 
             var matches = _comparer.FindMatches(target, candidates);
             if (matches.Count == 0)
