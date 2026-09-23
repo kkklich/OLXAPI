@@ -1,7 +1,5 @@
 using AF_mobile_web_api.Services.Interfaces;
 using ApplicationDatabase.Models;
-using System.Globalization;
-using System.Text;
 
 namespace AF_mobile_web_api.Services
 {
@@ -15,9 +13,8 @@ namespace AF_mobile_web_api.Services
     public class PropertyComparer : IPropertyComparer
     {
         // Fuzzy-match thresholds.
-        private const double AreaRelativeTolerance = 0.02;         // areas must agree within ±2%
+        public const double AreaEqualityToleranceMeters = 0.005;   // areas must be equal; epsilon only absorbs float round-trip
         private const double MaxCoordinateDistanceMeters = 150;    // "same building" radius
-        private const double MinTitleTokenJaccard = 0.6;           // token-set title similarity
         private const double MaxPricePerMeterRelativeGap = 0.35;   // larger gap => different property, not price drift
 
         private const double MetersPerDegreeLatitude = 111_320;    // approximation, plenty accurate at city scale
@@ -129,13 +126,13 @@ namespace AF_mobile_web_api.Services
                 return false;
             }
 
-            // Hard requirements: same city, near-identical area, same floor, same market.
+            // Hard requirements: same city, identical area, same floor, same market.
             if (string.IsNullOrWhiteSpace(a.City) || !TextEquals(a.City, b.City))
             {
                 return false;
             }
 
-            if (!AreasClose(a.Area, b.Area) || a.Floor != b.Floor || !TextEquals(a.Market, b.Market))
+            if (!AreasEqual(a.Area, b.Area) || a.Floor != b.Floor || !TextEquals(a.Market, b.Market))
             {
                 return false;
             }
@@ -154,7 +151,6 @@ namespace AF_mobile_web_api.Services
 
             // At least one corroborating signal beyond the shared profile.
             return CoordinatesClose(a, b)
-                || TitlesSimilar(a.Title, b.Title)
                 || SameNeighbourhoodProfile(a, b);
         }
 
@@ -181,22 +177,7 @@ namespace AF_mobile_web_api.Services
             return !double.IsNaN(row.Lat) && !double.IsNaN(row.Lon) && (row.Lat != 0 || row.Lon != 0);
         }
 
-        /// <summary>Signal (b): normalized titles share most of their words (token-set Jaccard).</summary>
-        private static bool TitlesSimilar(string? titleA, string? titleB)
-        {
-            var tokensA = TokenizeTitle(titleA);
-            var tokensB = TokenizeTitle(titleB);
-            if (tokensA.Count == 0 || tokensB.Count == 0)
-            {
-                return false;
-            }
-
-            var intersection = tokensA.Intersect(tokensB).Count();
-            var union = tokensA.Count + tokensB.Count - intersection;
-            return union > 0 && (double)intersection / union >= MinTitleTokenJaccard;
-        }
-
-        /// <summary>Signal (c): same district and building type plus the same seller kind.</summary>
+        /// <summary>Signal (b): same district and building type plus the same seller kind.</summary>
         private static bool SameNeighbourhoodProfile(PropertyData a, PropertyData b)
         {
             return !string.IsNullOrWhiteSpace(a.District)
@@ -208,14 +189,20 @@ namespace AF_mobile_web_api.Services
                 && a.Private == b.Private;
         }
 
-        private static bool AreasClose(double areaA, double areaB)
+        /// <summary>
+        /// Hard requirement: both rows state the same floor area. Portals round area to whole
+        /// or half meters, so a tolerance band spans neighbouring sizes instead of narrowing
+        /// the match — at 50 m² the old ±2% admitted 49, 50 and 51 alike. Only a sub-square-
+        /// centimeter epsilon is allowed here, to absorb the float round-trip through the database.
+        /// </summary>
+        private static bool AreasEqual(double areaA, double areaB)
         {
             if (areaA <= 0 || areaB <= 0)
             {
                 return false; // a missing area cannot corroborate a fuzzy match
             }
 
-            return Math.Abs(areaA - areaB) / Math.Max(areaA, areaB) <= AreaRelativeTolerance;
+            return Math.Abs(areaA - areaB) <= AreaEqualityToleranceMeters;
         }
 
         private static bool TextEquals(string? x, string? y)
@@ -254,58 +241,6 @@ namespace AF_mobile_web_api.Services
             }
 
             return normalized.TrimEnd('/');
-        }
-
-        private static HashSet<string> TokenizeTitle(string? title)
-        {
-            var tokens = new HashSet<string>(StringComparer.Ordinal);
-            if (string.IsNullOrWhiteSpace(title))
-            {
-                return tokens;
-            }
-
-            var normalized = RemoveDiacritics(title.ToLowerInvariant());
-            var builder = new StringBuilder();
-
-            foreach (var character in normalized)
-            {
-                if (char.IsLetterOrDigit(character))
-                {
-                    builder.Append(character);
-                }
-                else if (builder.Length > 0)
-                {
-                    tokens.Add(builder.ToString());
-                    builder.Clear();
-                }
-            }
-
-            if (builder.Length > 0)
-            {
-                tokens.Add(builder.ToString());
-            }
-
-            return tokens;
-        }
-
-        private static string RemoveDiacritics(string text)
-        {
-            var decomposed = text.Normalize(NormalizationForm.FormD);
-            var builder = new StringBuilder(decomposed.Length);
-
-            foreach (var character in decomposed)
-            {
-                if (CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark)
-                {
-                    builder.Append(character);
-                }
-            }
-
-            // Polish "ł" does not decompose into "l" + combining mark, so map it by hand.
-            return builder.ToString()
-                .Normalize(NormalizationForm.FormC)
-                .Replace('ł', 'l')
-                .Replace('Ł', 'L');
         }
 
         private static int Find(int[] parent, int index)

@@ -92,10 +92,11 @@ namespace AF_mobile_web_api.Services
 
             // Pre-filter candidates by what the comparer could accept, so it runs over - and
             // the database sends - a small set: every row sharing the offer's normalized Url,
-            // plus the rows meeting the fuzzy rules' hard requirements (±2% area, same floor,
-            // same market). Without floor and market a 50 m² Krakow offer pulled ~30k full
-            // rows to keep ~3k. An offer with no area cannot fuzzy-match at all, so it only
-            // needs its Url - this used to widen the window to every row of the city instead.
+            // plus the rows meeting the fuzzy rules' hard requirements (the same area, same
+            // floor, same market). Without floor and market a 50 m² Krakow offer pulled ~30k
+            // full rows to keep ~3k. An offer with no area cannot fuzzy-match at all, so it
+            // only needs its Url - this used to widen the window to every row of the city
+            // instead.
             var urlPrefix = PropertyComparer.NormalizeUrl(target.Url);
             var filter = new HistoryCandidateFilter
             {
@@ -104,8 +105,8 @@ namespace AF_mobile_web_api.Services
                     ? null
                     : new FuzzyCandidateBand
                     {
-                        AreaMin = target.Area * 0.98,
-                        AreaMax = target.Area * 1.02,
+                        AreaMin = target.Area - PropertyComparer.AreaEqualityToleranceMeters,
+                        AreaMax = target.Area + PropertyComparer.AreaEqualityToleranceMeters,
                         Floor = target.Floor,
                         Market = target.Market ?? string.Empty
                     }
