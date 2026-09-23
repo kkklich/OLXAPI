@@ -19,6 +19,8 @@ namespace AF_mobile_web_api.Domain
 
     public class FuzzyCandidateBand
     {
+        // The comparer requires an identical area, so this is a sub-square-centimeter window
+        // around it, wide enough only to survive the float round-trip through the database.
         public double AreaMin { get; init; }
         public double AreaMax { get; init; }
         public int Floor { get; init; }
