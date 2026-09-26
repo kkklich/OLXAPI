@@ -23,7 +23,7 @@ namespace AF_mobile_web_api.Repositories
         // with a per-row DateTime.UtcNow, so each offer has a distinct microsecond value (e.g.
         // Katowice's newest scrape holds ~5800 rows spread over ~11:36:28.0092xx). Matching the
         // exact MAX(AddedRecordTime) then returns a single row - the reason the dashboard showed
-        // "1 active offer". Grouping by day mirrors GetTimelineByCityAsync and, with weekly
+        // "1 active offer". Grouping by day mirrors GetTimelineByCitiesAsync and, with weekly
         // scrapes, cleanly isolates the latest run.
         public async Task<List<PropertyData>> GetLatestByCityAsync(string city)
         {
@@ -42,10 +42,12 @@ namespace AF_mobile_web_api.Repositories
                 .ToListAsync();
         }
 
-        public async Task<List<TimelineGroup>> GetTimelineByCityAsync(string city)
+        // One point per scrape day over all the given cities together - an area's cities are
+        // scraped in the same weekly run, so their rows share its days.
+        public async Task<List<TimelineGroup>> GetTimelineByCitiesAsync(IReadOnlyCollection<string> cities)
         {
             return await _dbSet
-                .Where(p => p.City == city)
+                .Where(p => cities.Contains(p.City))
                 .GroupBy(p => p.AddedRecordTime.Date)
                 .Select(g => new TimelineGroup
                 {

@@ -8,7 +8,7 @@ namespace AF_mobile_web_api.Repositories.Interfaces
     {
         Task<List<PropertyData>> GetLatestByCityAsync(string city);
         Task SaveMarketplaceDataAsync(List<PropertyData> properties);
-        Task<List<TimelineGroup>> GetTimelineByCityAsync(string city);
+        Task<List<TimelineGroup>> GetTimelineByCitiesAsync(IReadOnlyCollection<string> cities);
         IAsyncEnumerable<LatestOfferRow> StreamLatestOffersAsync();
         Task<List<OfferPageDetail>> GetPageDetailsAsync(IReadOnlyList<Guid> ids);
         Task<List<PropertyData>> GetHistoryCandidatesAsync(string city, HistoryCandidateFilter filter);
