@@ -148,10 +148,20 @@ namespace AF_mobile_web_api.Services
         {
             MarketplaceSearch searchedData = new MarketplaceSearch();
 
+            // 0 is no OLX city: its id has not been looked up yet (CityExtensions). Queried
+            // anyway, OLX would at best reject it and at worst ignore it and return the whole
+            // region - every offer of which would be saved as this city's. So OLX sits it out.
+            var cityId = city.ToEncodedOLXString();
+            if (cityId == 0)
+            {
+                _logger.LogWarning("No OLX city_id configured for {City}; skipping OLX for it", city);
+                return searchedData;
+            }
+
             var results = await GetAllOffersAsync(
                 categoryId: ConstantHelper.RealEstateCategory, 
                 regionId: city.ToEncodedRegionOLXString(),
-                cityId: city.ToEncodedOLXString(),
+                cityId: cityId,
                 priceFrom: 50_000,
                 priceTo: 10_000_000              
             );

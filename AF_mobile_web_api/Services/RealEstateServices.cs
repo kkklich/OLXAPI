@@ -106,11 +106,15 @@ namespace AF_mobile_web_api.Services
 
             await _propertyDataRepository.SaveMarketplaceDataAsync(propertiesList);
 
-            // StatisticServices caches these per-city entries for 120 minutes; evict them so
-            // dashboards pick up the freshly scraped batch instead of serving stale data.
-            _cache.Remove($"RealEstateData_{city}");
-            _cache.Remove($"FullDashboard_{city}");
-            _cache.Remove($"PriceDrops_{city}");
+            // StatisticServices caches these entries for 120 minutes, per city and per area of
+            // cities (CityArea); evict every one that includes this city so dashboards pick up
+            // the freshly scraped batch instead of serving stale data.
+            foreach (var name in CityArea.NamesIncluding(city))
+            {
+                _cache.Remove($"RealEstateData_{name}");
+                _cache.Remove($"FullDashboard_{name}");
+                _cache.Remove($"PriceDrops_{name}");
+            }
 
             // The offers list is served from a deduplicated snapshot of every city at once,
             // so it is rebuilt as a whole - the rows just saved are new newest-snapshots.

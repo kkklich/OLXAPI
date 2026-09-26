@@ -1,3 +1,4 @@
+using AF_mobile_web_api.Domain;
 using AF_mobile_web_api.DTO;
 
 namespace AF_mobile_web_api.Services
@@ -48,7 +49,7 @@ namespace AF_mobile_web_api.Services
 
         private static List<OfferSnapshot> Filter(IReadOnlyList<OfferSnapshot> offers, PropertyQueryParams query)
         {
-            var city = Key(query.City);
+            var cities = CityKeys(query.City);
             var district = Key(query.District);
             var market = Key(query.Market);
             var buildingType = Key(query.BuildingType);
@@ -58,7 +59,7 @@ namespace AF_mobile_web_api.Services
 
             foreach (var offer in offers)
             {
-                if (city != null && !string.Equals(offer.CityKey, city, StringComparison.Ordinal)) continue;
+                if (cities != null && !cities.Contains(offer.CityKey)) continue;
                 if (district != null && !string.Equals(offer.DistrictKey, district, StringComparison.Ordinal)) continue;
                 if (market != null && !string.Equals(offer.MarketKey, market, StringComparison.Ordinal)) continue;
                 if (buildingType != null && !string.Equals(offer.BuildingTypeKey, buildingType, StringComparison.Ordinal)) continue;
@@ -85,6 +86,19 @@ namespace AF_mobile_web_api.Services
         /// A filter value, folded for comparison; null when the filter is not set.
         private static string? Key(string? value) =>
             string.IsNullOrWhiteSpace(value) ? null : OfferText.Fold(value);
+
+        /// The city keys a city filter selects: every city of an area such as "Silesia" (its
+        /// offers keep their own city), otherwise just the value; null when the filter is not set.
+        private static HashSet<string>? CityKeys(string? value)
+        {
+            var key = Key(value);
+            if (key == null)
+                return null;
+
+            return CityArea.TryParse(value, out var area) && area.IsMultiCity
+                ? area.CityNames.Select(OfferText.Fold).ToHashSet(StringComparer.Ordinal)
+                : new HashSet<string>(StringComparer.Ordinal) { key };
+        }
 
         /// Trailing spaces are significant to a substring match, so the search term keeps them.
         private static string? Search(string? value)

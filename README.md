@@ -85,7 +85,19 @@ triggers, which require an `X-Api-Key` header once `ScrapeApiKey` is set.
 | `filterByParameter/{groupBy}/{city}/{parameter}` | one series out of the above |
 | `getRealEstate/{city}`, `getUniqueOffers`, `RealEstateStats`, `RealEstateGropuBy` | older endpoints, kept for compatibility |
 
-`{city}` is a `CityEnum` name — currently `Krakow` or `Katowice`.
+`{city}` is a `CityEnum` name — `Krakow`, `Katowice`, `Chorzow`, `Tychy`,
+`Mikolow`, `Myslowice`, `Sosnowiec` — or an area of several cities: `Silesia`
+is Katowice, Chorzów, Tychy, Mikołów, Mysłowice and Sosnowiec together. The
+app offers `Silesia` and `Krakow`; the `city` filter of `properties` takes an
+area too.
+
+An area ([`CityArea`](AF_mobile_web_api/Domain/CityArea.cs)) exists only when
+data is read: every row keeps the city it was scraped for, and an area's
+statistics are computed over its cities' rows — each city contributing its own
+newest scrape. So Katowice's history carries on inside Silesia. Within an area a
+district is labelled with its city (`Tychy – Osiedle Z`), because "Centrum" in
+Chorzów and "Centrum" in Sosnowiec are different places; an offer without a
+district counts towards its city.
 
 ### Health
 
@@ -114,7 +126,14 @@ message leaves out.
 The first two return **202 Accepted** immediately and run in the background —
 a full run makes ~12,000 outbound requests and takes minutes to an hour. A
 second call while one is running gets **409 Conflict**; only one scrape runs at
-a time.
+a time. Since the Silesian cities were added, a full run covers seven cities
+instead of two; the requests per city are set by price ranges, not by how many
+offers a city has, so expect it to take about three and a half times as long.
+
+OLX filters by a numeric `city_id` per city (`CityExtensions`). Only Kraków's
+and Katowice's are known so far; the other Silesian cities are scraped from
+Morizon and Nieruchomości-online only — OLX is skipped for them, with a warning
+in the log — until their ids are added.
 
 ```bash
 curl -H "X-Api-Key: $KEY" http://localhost:5016/api/RealEstate/getdataForManyCities
