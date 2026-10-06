@@ -24,8 +24,7 @@ namespace AF_mobile_web_api.Services
         private readonly ILogger<OfferSnapshotCache> _logger;
 
         private readonly object _gate = new();
-        private Task<IReadOnlyList<OfferSnapshot>>? _load;
-        private DateTime _loadedAt;
+        private Task<LoadedSnapshot>? _load;
 
         public OfferSnapshotCache(IServiceScopeFactory scopeFactory, ILogger<OfferSnapshotCache> logger)
         {
@@ -33,8 +32,10 @@ namespace AF_mobile_web_api.Services
             _logger = logger;
         }
 
-        public Task<IReadOnlyList<OfferSnapshot>> GetAsync()
+        public async Task<IReadOnlyList<OfferSnapshot>> GetAsync()
         {
+            Task<LoadedSnapshot> load;
+
             lock (_gate)
             {
                 if (_load is null || IsUnusable(_load))
@@ -42,8 +43,12 @@ namespace AF_mobile_web_api.Services
                     _load = LoadAsync();
                 }
 
-                return _load;
+                load = _load;
             }
+
+            // Awaited outside the lock: every caller shares the one load, only this unwrap
+            // is per caller.
+            return (await load).Offers;
         }
 
         public void Invalidate()
@@ -56,12 +61,16 @@ namespace AF_mobile_web_api.Services
 
         // A failed load must not be cached - the next request should retry rather than
         // replay the exception for the next two hours.
-        private bool IsUnusable(Task<IReadOnlyList<OfferSnapshot>> load) =>
+        //
+        // The age is the one this load carries, not a field any load writes: a load that an
+        // Invalidate() orphaned still runs to the end, and finishing after its replacement it
+        // used to stamp that replacement with its own time.
+        private static bool IsUnusable(Task<LoadedSnapshot> load) =>
             load.IsFaulted
             || load.IsCanceled
-            || (load.IsCompletedSuccessfully && DateTime.UtcNow - _loadedAt > Ttl);
+            || (load.IsCompletedSuccessfully && DateTime.UtcNow - load.Result.LoadedAt > Ttl);
 
-        private async Task<IReadOnlyList<OfferSnapshot>> LoadAsync()
+        private async Task<LoadedSnapshot> LoadAsync()
         {
             // Yield first: the load runs outside the lock held by the caller that started it.
             await Task.Yield();
@@ -74,17 +83,40 @@ namespace AF_mobile_web_api.Services
             var builder = new OfferSnapshotBuilder();
             var offers = new List<OfferSnapshot>();
 
+            // The load joins on (Url, AddedRecordTime) and relies on that pair being unique.
+            // Should two rows ever share an offer's oldest pair, the join to the first price
+            // repeats its newest row once per match: two entries with one Id tie on every
+            // sort key, the Id tiebreaker included, so they are free to straddle a page
+            // boundary and show on both pages. The first one streamed wins. (Two rows sharing
+            // the newest pair are two Ids - listed twice, but pages still cannot overlap.)
+            var seen = new HashSet<Guid>();
+            var duplicates = 0;
+
             // Streamed rather than materialised as a list first: the rows and the snapshot
             // would otherwise both be in memory at the peak, for ~95k offers.
             await foreach (var row in repository.StreamLatestOffersAsync())
             {
+                if (!seen.Add(row.Id))
+                {
+                    duplicates++;
+                    continue;
+                }
+
                 offers.Add(builder.Build(row));
             }
 
-            _loadedAt = DateTime.UtcNow;
+            if (duplicates > 0)
+            {
+                _logger.LogWarning("Offers snapshot skipped {Duplicates} duplicate rows: (Url, AddedRecordTime) is not unique for some offers", duplicates);
+            }
+
             _logger.LogInformation("Loaded offers snapshot: {Count} offers in {Elapsed} ms", offers.Count, stopwatch.ElapsedMilliseconds);
 
-            return offers;
+            return new LoadedSnapshot(offers, DateTime.UtcNow);
         }
+
+        // One load's result together with when it finished, so a load's age can never be
+        // confused with another's.
+        private sealed record LoadedSnapshot(IReadOnlyList<OfferSnapshot> Offers, DateTime LoadedAt);
     }
 }

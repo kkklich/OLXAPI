@@ -31,8 +31,13 @@ namespace AF_mobile_web_api.DTO
         public DateTime FirstSeen { get; set; }
         public DateTime LastSeen { get; set; }
         public int SnapshotCount { get; set; }
+        // The oldest price the portal actually stated - snapshots scraped with a 0 are
+        // skipped - or 0 when none of them had one.
         public double FirstPrice { get; set; }
-        public double TotalPriceChange => Price - FirstPrice;
+        // Null when either end has no price, as on the list (OfferSnapshot.PriceChange):
+        // measured against a 0, an offer first scraped without a price read as rising by
+        // its whole price, and one that lost its price as dropping by all of it.
+        public double? TotalPriceChange => Price > 0 && FirstPrice > 0 ? Price - FirstPrice : null;
 
         public List<PropertyHistoryEntryDTO> Entries { get; set; } = new();
     }
@@ -44,6 +49,9 @@ namespace AF_mobile_web_api.DTO
         public double PricePerMeter { get; set; }
         public int WebName { get; set; }
         public string Url { get; set; }
-        public double PriceChange { get; set; } // delta vs the previous entry, 0 for the first
+        // Delta vs the last earlier entry that stated a price; 0 for the first entry. Null
+        // when this entry has no price (0) or no earlier one had - a gap in the history,
+        // not a move to or from zero.
+        public double? PriceChange { get; set; }
     }
 }

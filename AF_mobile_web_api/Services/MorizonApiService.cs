@@ -23,7 +23,7 @@ namespace AF_mobile_web_api.Services
             var cityName = city.ToString().ToLower();
             var allResults = new MarketplaceSearch { Data = new List<SearchData>() };
 
-            // Define price ranges to cover 100,000 to 1,000,000 PLN
+            // 5,000 PLN price bands covering 100,000 to 10,000,000 PLN
             int minPrice = 100000;
             int maxPrice = 10000000;
             int priceStep = 5000;
@@ -119,6 +119,18 @@ namespace AF_mobile_web_api.Services
                 .Select(g => g.First())
                 .ToList();
 
+            // Some developer offers are listed without a price ("Zapytaj o cenę" on the site):
+            // the API sends price and priceM2 as null, yet the offer still matches the price band
+            // it was searched in. With nothing to read, such a row would be saved as Price 0 and
+            // add only a price-less snapshot to the offer's history, so it is skipped. Until the
+            // null guards in TransformPropertyToSearchData these nodes threw and were dropped by
+            // its catch, so the older scrapes hold none of them either.
+            var unpriced = uniqueProperties.RemoveAll(p => p.Price <= 0);
+            if (unpriced > 0)
+            {
+                _logger.LogInformation("Morizon listed {Count} offers in {City} without a price; skipped them", unpriced, city);
+            }
+
             return new MarketplaceSearch
             {
                 Data = uniqueProperties,
@@ -199,7 +211,9 @@ namespace AF_mobile_web_api.Services
 
                 // Price information
                 // JSON nulls arrive as JValue(Null), which passes a reference null-check but
-                // throws on child access - hence the JTokenType.Object guards below.
+                // throws on child access - hence the JTokenType.Object guards below. A null price
+                // is an offer listed without one: it parses to 0, and GetPropertyListingDataAsync
+                // skips it.
                 var priceElement = property["price"];
                 if (priceElement != null && priceElement.Type == JTokenType.Object)
                 {
@@ -256,20 +270,24 @@ namespace AF_mobile_web_api.Services
             var locationElement = property["location"];
             if (locationElement != null && locationElement.Type == JTokenType.Object)
             {
-                // Extract coordinates
-                var coordinatesElement = locationElement["coordinates"];
-                if (coordinatesElement != null && coordinatesElement.Type == JTokenType.Object)
+                // Coordinates: location.map.center, the point the offer page pins on its map, sent
+                // as JSON numbers ({"latitude":50.0599,"longitude":19.9383}). The Object guards
+                // keep an offer that comes without them (a null map or center) instead of throwing
+                // and dropping it; it keeps Lat/Lon 0, the "no coordinates" value the map skips.
+                var mapElement = locationElement["map"];
+                var centerElement = mapElement != null && mapElement.Type == JTokenType.Object ? mapElement["center"] : null;
+                if (centerElement != null && centerElement.Type == JTokenType.Object)
                 {
-                    var latString = coordinatesElement["lat"]?.Value<string>();
+                    var latString = centerElement["latitude"]?.Value<string>();
                     if (double.TryParse(latString, NumberStyles.Any, CultureInfo.InvariantCulture, out var lat))
                     {
                         location.Lat = lat;
                     }
 
-                    var lngString = coordinatesElement["lng"]?.Value<string>();
-                    if (double.TryParse(lngString, NumberStyles.Any, CultureInfo.InvariantCulture, out var lng))
+                    var lonString = centerElement["longitude"]?.Value<string>();
+                    if (double.TryParse(lonString, NumberStyles.Any, CultureInfo.InvariantCulture, out var lon))
                     {
-                        location.Lon = lng;
+                        location.Lon = lon;
                     }
                 }
 

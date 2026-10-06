@@ -42,16 +42,42 @@ namespace AF_mobile_web_api.Services
             _logger = logger;
         }
 
+        // Public getRealEstate/{city}: the city is parsed rather than passed through, so an
+        // unknown name is a 400 instead of a database query (and a cache entry) per request.
         public async Task<MarketplaceSearch> GetDataAsync(string city)
         {
-            var latestBatch = await _propertyDataRepository.GetLatestByCityAsync(city);
-            var data = _mapper.Map<List<SearchData>>(latestBatch);
+            var data = await GetLatestBatchAsync(StatisticServices.ParseCity(city));
 
             return new MarketplaceSearch
             {
                 Data = data,
                 TotalCount = data.Count
             };
+        }
+
+        // The latest scrape of one city - the dashboard's input and every legacy read endpoint's.
+        // Cached here rather than in StatisticServices: this class evicts the entry after a
+        // scrape, and its own getRealEstate/getUniqueOffers read it too, which they could not do
+        // through StatisticServices without a DI cycle (StatisticServices depends on this class).
+        // The list is shared by every caller until evicted: read it, never modify it.
+        public async Task<List<SearchData>> GetLatestBatchAsync(CityEnum city)
+        {
+            var cacheKey = $"RealEstateData_{city}";
+
+            if (_cache.TryGetValue(cacheKey, out List<SearchData>? cached) && cached is not null)
+            {
+                return cached;
+            }
+
+            var latestBatch = await _propertyDataRepository.GetLatestByCityAsync(city.ToString());
+            var data = _mapper.Map<List<SearchData>>(latestBatch);
+
+            _cache.Set(cacheKey, data, new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = StatisticServices.CacheDuration
+            });
+
+            return data;
         }
 
        
@@ -93,6 +119,22 @@ namespace AF_mobile_web_api.Services
                 return combinedData;
             }
 
+            // Every row of this run gets one AddedRecordTime, and the offers list joins each Url's
+            // newest snapshot back on exactly (Url, AddedRecordTime), so two rows with one Url
+            // would list that offer twice. Keep one row per exact Url: the first with a stated
+            // price, or simply the first when none states one.
+            var uniqueByUrl = combinedData.Data
+                .GroupBy(p => p.Url, StringComparer.Ordinal)
+                .Select(g => g.FirstOrDefault(p => p.Price > 0) ?? g.First())
+                .ToList();
+
+            var duplicateUrls = combinedData.Data.Count - uniqueByUrl.Count;
+            if (duplicateUrls > 0)
+            {
+                _logger.LogWarning("Dropped {Count} rows of {City} repeating a Url of this scrape", duplicateUrls, city);
+            }
+            combinedData.Data = uniqueByUrl;
+
             var propertiesList = _mapper.Map<List<PropertyData>>(combinedData.Data);
 
             // Stamp every row of this scrape with the same timestamp so it forms one identifiable
@@ -106,11 +148,14 @@ namespace AF_mobile_web_api.Services
 
             await _propertyDataRepository.SaveMarketplaceDataAsync(propertiesList);
 
-            // StatisticServices caches these per-city entries for 120 minutes; evict them so
-            // dashboards pick up the freshly scraped batch instead of serving stale data.
+            // These per-city entries (the latest batch, cached by GetLatestBatchAsync, the
+            // dashboard slices StatisticServices builds from it and the compressed map points)
+            // live for 120 minutes; evict them so dashboards pick up the freshly scraped batch
+            // instead of serving stale data.
             _cache.Remove($"RealEstateData_{city}");
             _cache.Remove($"FullDashboard_{city}");
             _cache.Remove($"PriceDrops_{city}");
+            _cache.Remove(MapPointsPayloadProvider.CacheKey(city));
 
             // The offers list is served from a deduplicated snapshot of every city at once,
             // so it is rebuilt as a whole - the rows just saved are new newest-snapshots.
@@ -135,28 +180,30 @@ namespace AF_mobile_web_api.Services
 
         public async Task<List<SearchDataDTO>> GetUniqueOffertsAsync()
         {
-            var data = await GetDataAsync(CityEnum.Krakow.ToString());
-            return GetUniqueByAreaFloorMarket(data.Data);
+            var data = await GetLatestBatchAsync(CityEnum.Krakow);
+            return GetUniqueByAreaFloorMarket(data);
         }
 
         private List<SearchDataDTO> GetUniqueByAreaFloorMarket(List<SearchData> list)
         {
-            var uniqueDict = new Dictionary<(double Area, int Floor, string Market, double Price), SearchData>();
+            var uniqueDict = new Dictionary<(double Area, int Floor, string Market, double Price), SearchDataDTO>();
 
             foreach (var item in list)
             {
                 var key = (item.Area, item.Floor, item.Market, item.Price);
-                if (!uniqueDict.ContainsKey(key))
+                if (!uniqueDict.TryGetValue(key, out var unique))
                 {
-                    uniqueDict[key] = item;
+                    uniqueDict[key] = _mapper.Map<SearchDataDTO>(item);
                 }
                 else
                 {
-                    uniqueDict[key].Url += ", " + item.Url;
+                    // Appended on the DTO, not on the offer: the offers are the cached batch, and
+                    // writing to them would grow their Urls with every call until the next scrape.
+                    unique.Url += ", " + item.Url;
                 }
             }
 
-            return _mapper.Map<List<SearchDataDTO>>(uniqueDict.Values);
+            return uniqueDict.Values.ToList();
         }
     }
 }

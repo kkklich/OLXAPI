@@ -26,6 +26,15 @@ namespace AF_mobile_web_api.Services
         public DateTime LastSeen { get; init; }
         public DateTime FirstSeen { get; init; }
         public int SnapshotCount { get; init; }
+        public double FirstPrice { get; init; }
+
+        /// What the list's "Change" column shows: the move since the first price the portal
+        /// stated for the offer. Null when either end has no price: a 0 is a price the portal
+        /// did not state, and measured against it an offer first scraped without one read as
+        /// rising by its whole price - and one that lost its price as the biggest drop on the
+        /// list. FirstPrice already skips the snapshots scraped without one (see
+        /// LatestOfferRow), so it is 0 only for an offer that never had a price at all.
+        public double? PriceChange => Price > 0 && FirstPrice > 0 ? Price - FirstPrice : null;
 
         // Comparison keys: see OfferText.Fold. The four short ones are shared instances
         // (there are only a handful of distinct cities, markets and building types), so
@@ -119,6 +128,7 @@ namespace AF_mobile_web_api.Services
             LastSeen = row.LastSeen,
             FirstSeen = row.FirstSeen,
             SnapshotCount = row.SnapshotCount,
+            FirstPrice = row.FirstPrice,
             TitleKey = OfferText.Fold(row.Title),
             CityKey = SharedKey(row.City),
             DistrictKey = SharedKey(row.District),

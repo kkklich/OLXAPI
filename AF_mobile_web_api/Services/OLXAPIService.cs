@@ -90,7 +90,8 @@ namespace AF_mobile_web_api.Services
             {
                 var url = BuildOffersUrl(categoryId, regionId, cityId, priceFrom, priceTo, offset, limit);
 
-                var rawResponse = await _httpClient.GetRaw(url);
+                // GetRaw hands the response over, so it is released here once per page
+                using var rawResponse = await _httpClient.GetRaw(url);
                 var result = await rawResponse.Content.ReadAsStringAsync();
                 var data = JsonConvert.DeserializeObject<QueryData>(result);
 
