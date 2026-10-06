@@ -9,6 +9,8 @@ namespace AF_mobile_web_api.Services
     /// Strong signal: the same normalized Url (the marketplace's natural key, stable
     /// across batches). Fallback: a fuzzy profile match that catches re-posts and
     /// cross-marketplace duplicates while deliberately ignoring price drift.
+    /// Over a set of rows, two Urls one marketplace listed in the same scrape are two
+    /// offers outright, whatever their other rows look like (FindMatches, GroupMatches).
     /// </summary>
     public class PropertyComparer : IPropertyComparer
     {
@@ -18,6 +20,9 @@ namespace AF_mobile_web_api.Services
         private const double MaxPricePerMeterRelativeGap = 0.35;   // larger gap => different property, not price drift
 
         private const double MetersPerDegreeLatitude = 111_320;    // approximation, plenty accurate at city scale
+
+        // Market is stored as scraped, in Polish; this is the primary market (new developments).
+        private const string PrimaryMarket = "Pierwotny";
 
         public bool AreSameProperty(PropertyData a, PropertyData b)
         {
@@ -51,8 +56,23 @@ namespace AF_mobile_web_api.Services
                 return matches;
             }
 
-            foreach (var candidate in candidates)
+            var rows = candidates.Where(row => row != null).ToList();
+
+            // A marketplace lists each offer once per scrape, so another Url it listed in a
+            // scrape that also listed the target's Url is another offer - in every scrape, not
+            // only that one. Its rows from the other scrapes pass the pairwise rules as easily
+            // as a re-post would, so the Url is ruled out as a whole. The target's scrapes
+            // come from its own Url's rows among the candidates.
+            var listings = ListingDays(rows.Append(target));
+            var targetUrl = NormalizeUrl(target.Url);
+
+            foreach (var candidate in rows)
             {
+                if (ListedBeside(candidate, NormalizeUrl(candidate.Url), targetUrl, listings))
+                {
+                    continue;
+                }
+
                 if (AreSameProperty(target, candidate))
                 {
                     matches.Add(candidate);
@@ -76,11 +96,20 @@ namespace AF_mobile_web_api.Services
                 parent[i] = i;
             }
 
+            // As in FindMatches, two Urls one marketplace listed in the same scrape never link,
+            // whichever scrapes the two rows compared come from. The closure can still join them
+            // through a third row that matches both (a duplicate on another marketplace);
+            // FindMatches compares every row with the target alone, so it cannot.
+            var urls = items.Select(row => NormalizeUrl(row.Url)).ToArray();
+            var listings = ListingDays(items);
+
             for (var i = 0; i < items.Count; i++)
             {
                 for (var j = i + 1; j < items.Count; j++)
                 {
-                    if (AreSameProperty(items[i], items[j]))
+                    if (AreSameProperty(items[i], items[j])
+                        && !ListedBeside(items[i], urls[i], urls[j], listings)
+                        && !ListedBeside(items[j], urls[j], urls[i], listings))
                     {
                         Union(parent, i, j);
                     }
@@ -113,15 +142,73 @@ namespace AF_mobile_web_api.Services
         }
 
         /// <summary>
-        /// Fuzzy identity for re-posted offers (new Url, same marketplace, later batch)
-        /// and cross-marketplace duplicates (different WebName, any batch).
+        /// The scrape a row belongs to. A run was meant to share one AddedRecordTime, but
+        /// historical rows were stamped per row, microseconds apart, so an exact comparison
+        /// never saw two rows of one old run as the same scrape. Scrapes run days apart, so
+        /// the calendar day identifies one, as everywhere else in the app
+        /// (PropertyDataRepository.GetLatestByCityAsync).
+        /// </summary>
+        private static DateTime ScrapeDay(PropertyData row) => row.AddedRecordTime.Date;
+
+        /// <summary>
+        /// The scrape days on which each marketplace listed each normalized Url. Rows with no
+        /// Url are left out: nothing tells them apart, so they prove nothing about another Url.
+        /// </summary>
+        /// <remarks>
+        /// WebName was 0 for every marketplace before 2025-11-24, so a scrape of that era can
+        /// look shared by two marketplaces' Urls. That can only rule a Url out, never merge one.
+        /// </remarks>
+        private static Dictionary<(int WebName, string Url), HashSet<DateTime>> ListingDays(IEnumerable<PropertyData> rows)
+        {
+            var days = new Dictionary<(int WebName, string Url), HashSet<DateTime>>();
+            foreach (var row in rows)
+            {
+                var url = NormalizeUrl(row.Url);
+                if (url.Length == 0)
+                {
+                    continue;
+                }
+
+                if (!days.TryGetValue((row.WebName, url), out var rowDays))
+                {
+                    rowDays = new HashSet<DateTime>();
+                    days[(row.WebName, url)] = rowDays;
+                }
+
+                rowDays.Add(ScrapeDay(row));
+            }
+
+            return days;
+        }
+
+        /// <summary>
+        /// True when the row's marketplace listed its Url and a different one in the same
+        /// scrape. It lists each offer once per scrape, so that makes them two offers.
+        /// </summary>
+        private static bool ListedBeside(
+            PropertyData row,
+            string rowUrl,
+            string otherUrl,
+            Dictionary<(int WebName, string Url), HashSet<DateTime>> listingDays)
+        {
+            return rowUrl.Length > 0
+                && otherUrl.Length > 0
+                && rowUrl != otherUrl
+                && listingDays.TryGetValue((row.WebName, rowUrl), out var rowDays)
+                && listingDays.TryGetValue((row.WebName, otherUrl), out var otherDays)
+                && rowDays.Overlaps(otherDays);
+        }
+
+        /// <summary>
+        /// Fuzzy identity for re-posted offers (new Url, same marketplace, another scrape;
+        /// secondary market only) and cross-marketplace duplicates (different WebName, any scrape).
         /// </summary>
         private static bool IsFuzzyMatch(PropertyData a, PropertyData b)
         {
-            // Within one batch a marketplace lists each offer once, so two different
-            // Urls on the same marketplace in the same batch are distinct offers;
-            // only cross-marketplace duplicates may fuzzy-match inside a batch.
-            if (a.AddedRecordTime == b.AddedRecordTime && a.WebName == b.WebName)
+            // Within one scrape a marketplace lists each offer once, so two different Urls
+            // on the same marketplace in the same scrape are distinct offers; only
+            // cross-marketplace duplicates may fuzzy-match inside a scrape.
+            if (a.WebName == b.WebName && ScrapeDay(a) == ScrapeDay(b))
             {
                 return false;
             }
@@ -133,6 +220,20 @@ namespace AF_mobile_web_api.Services
             }
 
             if (!AreasEqual(a.Area, b.Area) || a.Floor != b.Floor || !TextEquals(a.Market, b.Market))
+            {
+                return false;
+            }
+
+            // A development sells many units of one size on each floor, in one district and
+            // building, through one seller - every field these rules compare - so on one
+            // marketplace a new Url is as likely a sibling unit as a re-post of this one.
+            // Siblings listed in the same scrape are ruled out above and in FindMatches; this
+            // catches the ones that never were (a 41 m² unit at Centralna 51D in Krakow took the
+            // prices of two 41 m² units at 51C, listed before it). A sibling taken for a re-post
+            // invents a price change between two flats, while a missed re-post only shortens a
+            // history, so in the primary market only the same Url, or a duplicate on another
+            // marketplace, is the same offer.
+            if (a.WebName == b.WebName && TextEquals(a.Market, PrimaryMarket))
             {
                 return false;
             }

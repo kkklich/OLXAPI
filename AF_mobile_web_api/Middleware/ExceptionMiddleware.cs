@@ -25,6 +25,14 @@ namespace AF_mobile_web_api.Middleware
             {
                 await _next(context);
             }
+            catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+            {
+                // The client went away (closed the tab, navigated on, a proxy gave up) and the
+                // work was cancelled with it. Not a server fault, so not an error in the logs;
+                // and nobody is left to read a JSON body - writing one to the aborted
+                // connection would only fail again.
+                _logger.LogDebug("Request {Method} {Path} aborted by the client", context.Request.Method, context.Request.Path);
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, ex.Message);

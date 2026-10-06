@@ -36,6 +36,9 @@ namespace AF_mobile_web_api.Helper
         //Morizon
         public const string MorizonAPI = "https://www.morizon.pl/api-morizon";
         public const string DefaultSearchUrl = "/mieszkania/najtansze/krakow/?ps%5Bprice_from%5D=100000&ps%5Bprice_to%5D=750000";
+        // location.map.center is where an offer's coordinates live: the offer page draws its map
+        // pin from it. Morizon's own listing query never selects it (the listing has no map), and
+        // without it every Morizon row was saved at 0/0 and left off the dashboard map.
         public const string GraphqlQuery = @"query getPropertyListingData($url: String!) {
                 searchResult: searchProperties(url: $url) {
                 # adKeywords
@@ -87,6 +90,12 @@ namespace AF_mobile_web_api.Helper
                 isRecommended
                 location {
                 location
+                map {
+                center {
+                latitude
+                longitude
+                }
+                }
                 }
                 numberOfRooms
                 #photos {

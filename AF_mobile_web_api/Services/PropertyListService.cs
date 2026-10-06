@@ -22,8 +22,8 @@ namespace AF_mobile_web_api.Services
         }
 
         // Filtering, sorting and paging happen over the in-memory offers snapshot; only the
-        // columns the page renders (Url, Title, FirstPrice) are read from the database, by
-        // primary key. See OfferQuery for why the query this replaced could not stay in SQL.
+        // columns the page renders (Url, Title) are read from the database, by primary key.
+        // See OfferQuery for why the query this replaced could not stay in SQL.
         public async Task<PagedResultDTO<PropertyListItemDTO>> GetPagedAsync(PropertyQueryParams query)
         {
             // The DB stores scraped Polish market names, so the API's English aliases
@@ -66,10 +66,8 @@ namespace AF_mobile_web_api.Services
                     LastSeen = offer.LastSeen,
                     FirstSeen = offer.FirstSeen,
                     SnapshotCount = offer.SnapshotCount,
-                    // No detail row means the offer vanished between the snapshot and now,
-                    // which only a reset database can do; its own price is the honest
-                    // "unchanged" answer, rather than a change measured against zero.
-                    FirstPrice = detail?.FirstPrice ?? offer.Price
+                    FirstPrice = offer.FirstPrice,
+                    PriceChange = offer.PriceChange
                 };
             }).ToList();
 
@@ -97,6 +95,11 @@ namespace AF_mobile_web_api.Services
             // full rows to keep ~3k. An offer with no area cannot fuzzy-match at all, so it
             // only needs its Url - this used to widen the window to every row of the city
             // instead.
+            //
+            // The offer's own rows are evidence as well as matches: they tell the comparer in
+            // which scrapes the offer was listed, and any other Url its marketplace listed in
+            // one of them is another offer (PropertyComparer.FindMatches). So the Url branch
+            // must keep returning all of them, not just enough to draw the line.
             var urlPrefix = PropertyComparer.NormalizeUrl(target.Url);
             var filter = new HistoryCandidateFilter
             {
@@ -153,15 +156,27 @@ namespace AF_mobile_web_api.Services
                 CreatedTime = newest.CreatedTime,
 
                 // History aggregates over the matched snapshots (already ordered oldest first).
+                // A 0 price is one the portal did not state, so the first price is the oldest
+                // one it did; the oldest snapshot's own 0 would make every later price read
+                // as a rise by its whole amount.
                 FirstSeen = oldest.AddedRecordTime,
                 LastSeen = newest.AddedRecordTime,
                 SnapshotCount = matches.Count,
-                FirstPrice = oldest.Price
+                FirstPrice = matches.FirstOrDefault(m => m.Price > 0)?.Price ?? 0
             };
 
-            double? previousPrice = null;
+            // Each step is measured against the last price actually stated, so an entry
+            // without one is a gap (null) rather than a drop to zero followed by a rise
+            // back by the whole price.
+            double? lastStatedPrice = null;
             foreach (var row in matches)
             {
+                double? priceChange = history.Entries.Count == 0
+                    ? 0
+                    : row.Price > 0 && lastStatedPrice.HasValue
+                        ? row.Price - lastStatedPrice.Value
+                        : null;
+
                 history.Entries.Add(new PropertyHistoryEntryDTO
                 {
                     Date = row.AddedRecordTime,
@@ -169,10 +184,13 @@ namespace AF_mobile_web_api.Services
                     PricePerMeter = row.PricePerMeter,
                     WebName = row.WebName,
                     Url = row.Url,
-                    PriceChange = previousPrice.HasValue ? row.Price - previousPrice.Value : 0
+                    PriceChange = priceChange
                 });
 
-                previousPrice = row.Price;
+                if (row.Price > 0)
+                {
+                    lastStatedPrice = row.Price;
+                }
             }
 
             return history;

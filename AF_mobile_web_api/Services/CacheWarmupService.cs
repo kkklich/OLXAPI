@@ -47,6 +47,15 @@ namespace AF_mobile_web_api.Services
                     await statistics.GetFullDashboardDataAsync(city.ToString());
                 }, stoppingToken);
 
+                // Built from the dashboard just cached: serializing and compressing the map
+                // points is the rest of what the first map opened would otherwise wait for.
+                await WarmAsync($"map points {city}", async () =>
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var mapPoints = scope.ServiceProvider.GetRequiredService<IMapPointsPayloadProvider>();
+                    await mapPoints.GetAsync(city.ToString());
+                }, stoppingToken);
+
                 // Requested alongside the dashboard on every visit, and ~1.8s to build cold.
                 await WarmAsync($"price drops {city}", async () =>
                 {

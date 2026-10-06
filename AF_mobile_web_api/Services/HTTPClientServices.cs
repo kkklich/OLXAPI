@@ -18,8 +18,10 @@ namespace AF_mobile_web_api.Services
             var client = _httpClientFactory.CreateClient();
             if (timeoutInSeconds.HasValue) client.Timeout = TimeSpan.FromSeconds(timeoutInSeconds.Value);
 
-            var request = new HttpRequestMessage(HttpMethod.Get, url);
-            var resp = await client.SendAsync(request);
+            // Both messages are owned here: the body is read and deserialized before returning,
+            // and `using` also releases them when EnsureSuccess throws on an error status.
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            using var resp = await client.SendAsync(request);
 
             return await HandleResponse<TOutput>(resp, url);
         }
@@ -29,7 +31,10 @@ namespace AF_mobile_web_api.Services
             var client = _httpClientFactory.CreateClient();
             if (timeoutInSeconds.HasValue) client.Timeout = TimeSpan.FromSeconds(timeoutInSeconds.Value);
 
-            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            // Only the request is disposed here; the response is handed to the caller, who owns
+            // it from then on and must dispose it. SendAsync buffers the whole body by default
+            // (ResponseContentRead), so releasing the request does not affect reading it.
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
 
             if (headers is { Count: > 0 })
             {
@@ -40,12 +45,17 @@ namespace AF_mobile_web_api.Services
             }
 
             var resp = await client.SendAsync(request);
-            if (!resp.IsSuccessStatusCode)
+            try
             {
                 await EnsureSuccess(resp, url);
+                return resp;
             }
-
-            return resp;
+            catch
+            {
+                // A failed response never reaches the caller, so nobody else could dispose it.
+                resp.Dispose();
+                throw;
+            }
         }
 
         public async Task<TOutput> PostAsync<TInput, TOutput>(string url, TInput inputData, bool withToken = true, double? timeoutInSeconds = null)
@@ -62,8 +72,10 @@ namespace AF_mobile_web_api.Services
             var client = _httpClientFactory.CreateClient();
             if (timeoutInSeconds.HasValue) client.Timeout = TimeSpan.FromSeconds(timeoutInSeconds.Value);
 
+            // Disposing the request also disposes its Content. Both messages are owned here, as in
+            // Get: `using` releases them on the success path and when EnsureSuccess throws.
             var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-            var request = new HttpRequestMessage(HttpMethod.Post, url)
+            using var request = new HttpRequestMessage(HttpMethod.Post, url)
             {
                 Content = content
             };
@@ -71,7 +83,7 @@ namespace AF_mobile_web_api.Services
             request.Headers.Add("Accept", "application/json");
             request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) HttpClientServices/1.0");
 
-            var resp = await client.SendAsync(request);
+            using var resp = await client.SendAsync(request);
             return await HandleResponse<TOutput>(resp, url);
         }
 

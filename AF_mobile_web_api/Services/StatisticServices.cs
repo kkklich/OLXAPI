@@ -15,7 +15,9 @@ namespace AF_mobile_web_api.Services
         private readonly IRealEstateServices _realEstate;
         private readonly IMemoryCache _cache;
 
-        private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(120);
+        // Also the TTL of the per-city latest-batch entry (RealEstateData_{city}) that
+        // RealEstateServices keeps and every dashboard entry here is built from - one knob.
+        internal static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(120);
 
         // districts with fewer offers than this produce statistically meaningless medians
         private const int MinOffersPerDistrict = 5;
@@ -31,42 +33,27 @@ namespace AF_mobile_web_api.Services
             _propertyDataRepository = propertyDataRepository;
         }
 
-        private static CityEnum ParseCity(string cityName)
+        // Shared with RealEstateServices, whose public getRealEstate/{city} takes a city too:
+        // an unknown name is the caller's mistake (ArgumentException -> 400 in the middleware),
+        // not a query for a city with no rows.
+        internal static CityEnum ParseCity(string cityName)
         {
             if (string.IsNullOrWhiteSpace(cityName))
                 throw new ArgumentException("City name cannot be null or empty", nameof(cityName));
 
-            if (!Enum.TryParse<CityEnum>(cityName, true, out CityEnum city))
+            // IsDefined as well: Enum.TryParse also accepts numbers and comma lists, and one
+            // that maps to no city ("7") would still reach a cache key and a database query.
+            if (!Enum.TryParse<CityEnum>(cityName, true, out CityEnum city) || !Enum.IsDefined(city))
                 throw new ArgumentException($"Invalid city name: {cityName}. Valid cities: {string.Join(", ", Enum.GetNames<CityEnum>())}");
 
             return city;
         }
 
-        private async Task<List<SearchData>> GetCachedRealEstateDataAsync(string city)
-        {
-            var cacheKey = $"RealEstateData_{city}";
-
-            if (_cache.TryGetValue(cacheKey, out List<SearchData> cached))
-            {
-                return cached;
-            }
-
-            var results = (await _realEstate.GetDataAsync(city)).Data;
-
-            var options = new MemoryCacheEntryOptions
-            {
-                AbsoluteExpirationRelativeToNow = CacheDuration
-            };
-
-            _cache.Set(cacheKey, results, options);
-
-            return results;
-        }
-
         // includeMapPoints = false returns the same dashboard without its map points. They
-        // are ~98% of the payload (1.7 MB of 1.76 MB for Krakow) and the page draws no map
-        // until the visitor asks for one, so the dashboard fetches them separately through
-        // getMapPoints/{city} - which is served from this very cache entry.
+        // are over 99% of the payload (megabytes for Krakow, against ~16 KB for the charts
+        // and insights - ARCHITECTURE.md section 5 has the measured sizes) and the page
+        // draws no map until the visitor asks for one, so the dashboard fetches them
+        // separately through getMapPoints/{city} - which is served from this very cache entry.
         public async Task<FullDashboardDTO> GetFullDashboardDataAsync(string cityName, bool includeMapPoints = true)
         {
             var city = ParseCity(cityName);
@@ -80,13 +67,16 @@ namespace AF_mobile_web_api.Services
             // Sequential, not concurrent: both calls share the same scoped DbContext,
             // and EF Core throws if two operations run on it at the same time.
             var timeline = await _propertyDataRepository.GetTimelineByCityAsync(city.ToString());
-            var results = await GetCachedRealEstateDataAsync(city.ToString());
+            var results = await _realEstate.GetLatestBatchAsync(city);
 
+            // Everything below that sorts or groups the offers is computed once here and handed
+            // to both the charts and the insights, which publish the same figures.
             var validOffers = GetValidOffers(results);
             var validWithDistrict = validOffers
                 .Where(x => !string.IsNullOrWhiteSpace(x.Location?.District))
                 .ToList();
 
+            // Valid offers by district, dropping districts with too few offers to trust the median.
             var districtGroups = validWithDistrict
                 .GroupBy(x => x.Location.District)
                 .Where(g => g.Count() >= MinOffersPerDistrict)
@@ -96,8 +86,10 @@ namespace AF_mobile_web_api.Services
                 g => g.Key,
                 g => CalculateMedian(g.Select(x => x.PricePerMeter)));
 
-            var charts = BuildDashboardCharts(results, validOffers, timeline);
-            var insights = BuildMarketInsights(results, validOffers, validWithDistrict, districtGroups, districtMedians);
+            var medians = OfferMedians.Of(validOffers);
+
+            var charts = BuildDashboardCharts(results, validOffers, timeline, medians, districtGroups, districtMedians);
+            var insights = BuildMarketInsights(results, validOffers, validWithDistrict, districtGroups, districtMedians, medians);
             var mapPoints = BuildMapPoints(results);
 
             var dto = new FullDashboardDTO
@@ -127,11 +119,29 @@ namespace AF_mobile_web_api.Services
                     MapPoints = new List<MapPointDTO>()
                 };
 
-        private static DashboardChartsDTO BuildDashboardCharts(List<SearchData> results, List<SearchData> validOffers, List<TimelineGroup> timeline)
+        // Medians of the three headline figures over the valid offers. The Summary tiles and
+        // the Insights panel both publish them, and every median sorts all valid offers, so
+        // they are computed once per dashboard build instead of once per panel. Unrounded:
+        // each panel still applies its own rounding.
+        private readonly record struct OfferMedians(double Price, double PricePerMeter, double Area)
+        {
+            public static OfferMedians Of(List<SearchData> validOffers) => new(
+                CalculateMedian(validOffers.Select(x => x.Price)),
+                CalculateMedian(validOffers.Select(x => x.PricePerMeter)),
+                CalculateMedian(validOffers.Select(x => x.Area)));
+        }
+
+        private static DashboardChartsDTO BuildDashboardCharts(
+            List<SearchData> results,
+            List<SearchData> validOffers,
+            List<TimelineGroup> timeline,
+            OfferMedians medians,
+            List<IGrouping<string, SearchData>> districtGroups,
+            Dictionary<string, double> districtMedians)
         {
             var dto = new DashboardChartsDTO
             {
-                Timeline = timeline
+                Timeline = PricedDays(timeline)
                     .Select(x => new TimelinePointDTO
                     {
                         Date = x.Date.ToString("dd-MM-yyyy"),
@@ -147,15 +157,16 @@ namespace AF_mobile_web_api.Services
                 dto.Summary = new DashboardSummaryDTO
                 {
                     TotalOffers = results.Count,
-                    MedianPrice = Math.Round(CalculateMedian(validOffers.Select(x => x.Price)), 0),
-                    MedianPricePerMeter = Math.Round(CalculateMedian(validOffers.Select(x => x.PricePerMeter)), 0),
-                    MedianArea = Math.Round(CalculateMedian(validOffers.Select(x => x.Area)), 1),
+                    MedianPrice = Math.Round(medians.Price, 0),
+                    MedianPricePerMeter = Math.Round(medians.PricePerMeter, 0),
+                    MedianArea = Math.Round(medians.Area, 1),
                     PrivateOffersPercent = Math.Round(100.0 * results.Count(x => x.Private) / results.Count, 1),
+                    // the unfiltered timeline: the latest scrape is the latest scrape, priced or not
                     LastUpdated = timeline.Count > 0 ? timeline[^1].Date.ToString("dd-MM-yyyy") : string.Empty
                 };
 
                 dto.PricePerMeterHistogram = BuildPricePerMeterHistogram(validOffers);
-                dto.DistrictPrices = BuildDistrictPrices(validOffers);
+                dto.DistrictPrices = BuildDistrictPrices(districtGroups, districtMedians);
                 dto.MarketSplit = BuildSplit(validOffers, x => x.Market);
                 dto.BuildingTypeSplit = BuildSplit(validOffers, x => x.BuildingType);
             }
@@ -168,22 +179,21 @@ namespace AF_mobile_web_api.Services
             List<SearchData> validOffers,
             List<SearchData> validWithDistrict,
             List<IGrouping<string, SearchData>> districtGroups,
-            Dictionary<string, double> districtMedians)
+            Dictionary<string, double> districtMedians,
+            OfferMedians medians)
         {
             // no valid offers -> Min()/Max() below would throw and results.Count would divide by zero
             if (validOffers.Count == 0)
                 return new MarketInsightsDTO();
 
-            var pricesPerMeter = validOffers.Select(x => x.PricePerMeter).ToList();
-
             var insights = new MarketInsightsDTO
             {
                 TotalOffers = results.Count,
-                MedianPrice = Math.Round(CalculateMedian(validOffers.Select(x => x.Price)), 0),
-                MedianPricePerMeter = Math.Round(CalculateMedian(pricesPerMeter), 0),
-                MinPricePerMeter = Math.Round(pricesPerMeter.Min(), 0),
-                MaxPricePerMeter = Math.Round(pricesPerMeter.Max(), 0),
-                MedianArea = Math.Round(CalculateMedian(validOffers.Select(x => x.Area)), 1),
+                MedianPrice = Math.Round(medians.Price, 0),
+                MedianPricePerMeter = Math.Round(medians.PricePerMeter, 0),
+                MinPricePerMeter = Math.Round(validOffers.Min(x => x.PricePerMeter), 0),
+                MaxPricePerMeter = Math.Round(validOffers.Max(x => x.PricePerMeter), 0),
+                MedianArea = Math.Round(medians.Area, 1),
                 PrivateOffersPercent = Math.Round(100.0 * results.Count(x => x.Private) / results.Count, 1),
                 OffersBySource = results
                     .GroupBy(x => x.WebName)
@@ -231,7 +241,7 @@ namespace AF_mobile_web_api.Services
 
         private static List<MapPointDTO> BuildMapPoints(List<SearchData> results)
         {
-            var points = results
+            return results
                 .Where(x => x.Location != null && x.Location.Lat != 0 && x.Location.Lon != 0)
                 .Select(x => new MapPointDTO
                 {
@@ -252,28 +262,6 @@ namespace AF_mobile_web_api.Services
                     }
                 })
                 .ToList();
-
-            if (points.Count == 0)
-                return points;
-
-            var values = points.Select(p => p.PricePerMeter).Where(v => v > 0).ToList();
-            if (values.Count == 0)
-                return points;
-
-            var minVal = values.Min();
-            var maxVal = values.Max();
-            var range = maxVal - minVal;
-
-            foreach (var p in points)
-            {
-                // clamp: offers with PricePerMeter <= 0 pass the coords filter but sit below minVal
-                var ratio = Math.Clamp(range > 0 ? (p.PricePerMeter - minVal) / range : 0.5, 0, 1);
-                var r = (int)(255 * ratio);
-                var b = (int)(255 * (1 - ratio));
-                p.Color = $"rgb({r},0,{b})";
-            }
-
-            return points;
         }
 
         public async Task<List<TimelinePriceDTO>> GetTimelinePrice(string cityName)
@@ -283,7 +271,7 @@ namespace AF_mobile_web_api.Services
             // grouped and sorted in SQL - avoids loading every property row into memory
             var groupedData = await _propertyDataRepository.GetTimelineByCityAsync(city.ToString());
 
-            return groupedData
+            return PricedDays(groupedData)
                 .Select(x => new TimelinePriceDTO
                 {
                     AddedDate = x.Date.ToString("dd-MM-yyyy"),
@@ -293,6 +281,14 @@ namespace AF_mobile_web_api.Services
                 })
                 .ToList();
         }
+
+        // The days a price trend can plot. GetTimelineByCityAsync averages only the rows that
+        // state a price, and a day where none did averages to 0 - "unknown", not free flats.
+        // Plotted, it would pull the trend line down to zero and back, so it is left out and the
+        // line joins the neighbouring days. Only the plotted series drop it: the day still
+        // happened, so the dashboard's LastUpdated reads the unfiltered timeline.
+        private static IEnumerable<TimelineGroup> PricedDays(List<TimelineGroup> timeline) =>
+            timeline.Where(x => x.AvgPricePerMeter > 0);
 
         // Thin wrapper kept for API compatibility - the app itself calls getFullDashboard.
         public async Task<DashboardChartsDTO> GetDashboardCharts(string cityName)
@@ -337,15 +333,20 @@ namespace AF_mobile_web_api.Services
             return bins;
         }
 
-        private static List<DistrictPriceDTO> BuildDistrictPrices(List<SearchData> validOffers)
+        // The same district groups and medians as the insights' district list - only the order
+        // (most expensive first, where the insights run cheapest first) and the cut to the
+        // top ten differ.
+        private static List<DistrictPriceDTO> BuildDistrictPrices(
+            List<IGrouping<string, SearchData>> districtGroups,
+            Dictionary<string, double> districtMedians)
         {
             const int maxDistricts = 10;
 
-            return GroupByDistrict(validOffers)
+            return districtGroups
                 .Select(g => new DistrictPriceDTO
                 {
                     District = g.Key,
-                    MedianPricePerMeter = Math.Round(CalculateMedian(g.Select(x => x.PricePerMeter)), 0),
+                    MedianPricePerMeter = Math.Round(districtMedians[g.Key], 0),
                     Count = g.Count()
                 })
                 .OrderByDescending(x => x.MedianPricePerMeter)
@@ -356,14 +357,6 @@ namespace AF_mobile_web_api.Services
         // Price/PricePerMeter/Area are all > 0: filters out scraper rows with missing or garbage values.
         private static List<SearchData> GetValidOffers(List<SearchData> results) =>
             results.Where(x => x.Price > 0 && x.PricePerMeter > 0 && x.Area > 0).ToList();
-
-        // Groups valid offers by district, dropping districts with too few offers to trust the median.
-        private static List<IGrouping<string, SearchData>> GroupByDistrict(List<SearchData> validOffers) =>
-            validOffers
-                .Where(x => !string.IsNullOrWhiteSpace(x.Location?.District))
-                .GroupBy(x => x.Location.District)
-                .Where(g => g.Count() >= MinOffersPerDistrict)
-                .ToList();
 
         private static List<SplitSliceDTO> BuildSplit(List<SearchData> validOffers, Func<SearchData, string> keySelector)
         {
@@ -431,10 +424,12 @@ namespace AF_mobile_web_api.Services
             return (sorted[(count / 2) - 1] + sorted[count / 2]) / 2.0;
         }
 
+        // Legacy Krakow-only endpoints (RealEstateStats, RealEstateGropuBy): served from the same
+        // cached latest batch as the dashboard, so an open public URL costs no database query.
         public async Task<RealEstateStatistics> GetDataWithStatistics()
         {
-            var response = await _realEstate.GetDataAsync(CityEnum.Krakow.ToString());
-            return CalculateStatistics(response.Data);
+            var data = await _realEstate.GetLatestBatchAsync(CityEnum.Krakow);
+            return CalculateStatistics(data);
         }
 
         private RealEstateStatistics CalculateStatistics(List<SearchData> data)
@@ -458,7 +453,7 @@ namespace AF_mobile_web_api.Services
 
         public async Task<Dictionary<object, RealEstateStatistics>> GetDataWithGroupStatistics(string groupByProperty)
         {
-            var response = await _realEstate.GetDataAsync(CityEnum.Krakow.ToString());
+            var data = await _realEstate.GetLatestBatchAsync(CityEnum.Krakow);
 
             var propertyParts = groupByProperty.Split('.');
             var type = typeof(SearchData);
@@ -477,7 +472,7 @@ namespace AF_mobile_web_api.Services
                 return value;
             };
 
-            var groupedByData = CalculateStatisticsGroupBy(response.Data, keySelector);
+            var groupedByData = CalculateStatisticsGroupBy(data, keySelector);
             
             return groupedByData;
 
@@ -553,7 +548,7 @@ namespace AF_mobile_web_api.Services
             // garbage/differently-cased value would add a permanent cache entry plus a DB query.
             var parsedCity = ParseCity(city);
 
-            var results = await GetCachedRealEstateDataAsync(parsedCity.ToString());
+            var results = await _realEstate.GetLatestBatchAsync(parsedCity);
             return GetBarChartDataByBuildingType(results, groupedBy);
 
         }
@@ -721,7 +716,7 @@ namespace AF_mobile_web_api.Services
             // garbage/differently-cased value would add a permanent cache entry plus a DB query.
             var parsedCity = ParseCity(city);
 
-            var results = await GetCachedRealEstateDataAsync(parsedCity.ToString());
+            var results = await _realEstate.GetLatestBatchAsync(parsedCity);
 
             var groupedStats = GetDataWithGroupStatistics(results, groupBy);
             var fullChart = BuildChartData(groupedStats);

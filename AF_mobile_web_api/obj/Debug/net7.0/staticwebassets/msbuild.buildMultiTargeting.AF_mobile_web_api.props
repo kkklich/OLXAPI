@@ -1,3 +1,0 @@
-﻿<Project>
-  <Import Project="..\build\AF_mobile_web_api.props" />
-</Project>
