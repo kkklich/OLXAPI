@@ -1,4 +1,4 @@
-﻿using AF_mobile_web_api.Domain;
+using AF_mobile_web_api.Domain;
 using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.Repositories.Interfaces;
 using ApplicationDatabase;
@@ -23,7 +23,7 @@ namespace AF_mobile_web_api.Repositories
         // with a per-row DateTime.UtcNow, so each offer has a distinct microsecond value (e.g.
         // Katowice's newest scrape holds ~5800 rows spread over ~11:36:28.0092xx). Matching the
         // exact MAX(AddedRecordTime) then returns a single row - the reason the dashboard showed
-        // "1 active offer". Grouping by day mirrors GetTimelineByCityAsync and, with weekly
+        // "1 active offer". Grouping by day mirrors GetTimelineByCitiesAsync and, with weekly
         // scrapes, cleanly isolates the latest run.
         public async Task<List<PropertyData>> GetLatestByCityAsync(string city)
         {
@@ -42,16 +42,21 @@ namespace AF_mobile_web_api.Repositories
                 .ToListAsync();
         }
 
-        public async Task<List<TimelineGroup>> GetTimelineByCityAsync(string city)
+        // One point per scrape day over all the given cities together - an area's cities are
+        // scraped in the same weekly run, so their rows share its days. Price and PricePerMeter
+        // are each averaged only over the rows that carry them: 0 means the portal did not say,
+        // and averaging it in dragged the trend down and made it jump with the share of unpriced
+        // rows in each scrape.
+        public async Task<List<TimelineGroup>> GetTimelineByCitiesAsync(IReadOnlyCollection<string> cities)
         {
             return await _dbSet
-                .Where(p => p.City == city)
+                .Where(p => cities.Contains(p.City))
                 .GroupBy(p => p.AddedRecordTime.Date)
                 .Select(g => new TimelineGroup
                 {
                     Date = g.Key,
-                    AvgPrice = g.Average(x => x.Price),
-                    AvgPricePerMeter = g.Average(x => x.PricePerMeter),
+                    AvgPrice = g.Average(x => x.Price > 0 ? (double?)x.Price : null) ?? 0,
+                    AvgPricePerMeter = g.Average(x => x.PricePerMeter > 0 ? (double?)x.PricePerMeter : null) ?? 0,
                     Count = g.Count()
                 })
                 .OrderBy(x => x.Date)
@@ -60,8 +65,20 @@ namespace AF_mobile_web_api.Repositories
 
         public async Task SaveMarketplaceDataAsync(List<PropertyData> properties)
         {
-            await _dbSet.AddRangeAsync(properties);
-            await _dbContext.SaveChangesAsync();
+            try
+            {
+                await _dbSet.AddRangeAsync(properties);
+                await _dbContext.SaveChangesAsync();
+            }
+            finally
+            {
+                // The multi-city job saves every city through one DI scope, so without this one
+                // DbContext keeps tracking every row of every city and each SaveChanges gets
+                // slower detecting changes over all of them. Nothing reads these rows back through
+                // tracking. In a finally so a failed batch cannot be re-inserted by the next
+                // city's SaveChanges either.
+                _dbContext.ChangeTracker.Clear();
+            }
         }
 
         // The distinct offers of the whole table: one row per Url - its newest snapshot -
@@ -84,39 +101,69 @@ namespace AF_mobile_web_api.Repositories
                     Url = g.Key,
                     LastSeen = g.Max(o => o.AddedRecordTime),
                     FirstSeen = g.Min(o => o.AddedRecordTime),
+                    // The oldest snapshot that states a price, NULL when none does. The
+                    // conditional selector translates to MIN(CASE WHEN ... THEN ... END) and
+                    // MIN skips the NULLs, so it is one more aggregate of the same pass.
+                    FirstPricedSeen = g.Min(o => o.Price > 0 ? (DateTime?)o.AddedRecordTime : null),
                     SnapshotCount = g.Count()
                 });
 
             // Url and Title are left out on purpose: they are the widest columns and are
             // only needed for the rows one page actually renders (GetPageDetailsAsync).
+            //
+            // The second join reads the first price, which the list needs to filter and sort
+            // by the price change over every offer rather than only the ten it renders. That
+            // is the price of the oldest snapshot that states one, not of the oldest snapshot:
+            // a 0 is a price the portal did not state, and taken as the first price it left an
+            // offer first scraped without one with an unknown change however long it had been
+            // priced since, while its history page (GetHistoryAsync) measured from the oldest
+            // non-zero price. Hence (Url, FirstPricedSeen) rather than (Url, FirstSeen), and
+            // only priced rows on the joined side, so an unpriced row sharing that timestamp
+            // cannot be the one picked. FirstSeen itself stays the oldest snapshot overall -
+            // it is the "first seen" date the list shows and sorts by.
+            //
+            // It is a LEFT join - GroupJoin + SelectMany over DefaultIfEmpty is how EF spells
+            // one: an offer that never stated a price has no such row, and keeps FirstPrice 0
+            // (an unknown change) instead of dropping out of the list.
+            //
+            // (Url, AddedRecordTime) is effectively unique - historical rows were stamped per
+            // row, to the microsecond - so neither join multiplies rows.
             return _dbSet.AsNoTracking()
                 .Join(latestPerUrl,
                     p => new { p.Url, Time = p.AddedRecordTime },
                     l => new { l.Url, Time = l.LastSeen },
-                    (p, l) => new LatestOfferRow
+                    (p, l) => new { Newest = p, Aggregates = l })
+                .GroupJoin(_dbSet.AsNoTracking().Where(o => o.Price > 0),
+                    x => new { x.Newest.Url, Time = x.Aggregates.FirstPricedSeen },
+                    o => new { o.Url, Time = (DateTime?)o.AddedRecordTime },
+                    (x, priced) => new { x.Newest, x.Aggregates, Priced = priced })
+                .SelectMany(x => x.Priced.DefaultIfEmpty(),
+                    (x, firstPriced) => new LatestOfferRow
                     {
-                        Id = p.Id,
-                        Price = p.Price,
-                        PricePerMeter = p.PricePerMeter,
-                        Floor = p.Floor,
-                        Market = p.Market,
-                        BuildingType = p.BuildingType,
-                        Area = p.Area,
-                        Private = p.Private,
-                        WebName = p.WebName,
-                        City = p.City,
-                        District = p.District,
-                        Title = p.Title,
-                        LastSeen = p.AddedRecordTime,
-                        FirstSeen = l.FirstSeen,
-                        SnapshotCount = l.SnapshotCount
+                        Id = x.Newest.Id,
+                        Price = x.Newest.Price,
+                        PricePerMeter = x.Newest.PricePerMeter,
+                        Floor = x.Newest.Floor,
+                        Market = x.Newest.Market,
+                        BuildingType = x.Newest.BuildingType,
+                        Area = x.Newest.Area,
+                        Private = x.Newest.Private,
+                        WebName = x.Newest.WebName,
+                        City = x.Newest.City,
+                        District = x.Newest.District,
+                        Title = x.Newest.Title,
+                        LastSeen = x.Newest.AddedRecordTime,
+                        FirstSeen = x.Aggregates.FirstSeen,
+                        SnapshotCount = x.Aggregates.SnapshotCount,
+                        FirstPrice = firstPriced == null ? 0 : firstPriced.Price
                     })
                 .AsAsyncEnumerable();
         }
 
         // The display-only columns of the offers on one page, by primary key: the Url and
-        // Title kept out of the in-memory snapshot, plus the price of the oldest snapshot
-        // of that Url (the "first price" the list shows the change against).
+        // Title kept out of the in-memory snapshot. The first price used to be read here too,
+        // as a correlated subquery over the longtext Url once per rendered row; it now comes
+        // from the snapshot, which the list also filters and sorts by.
         public async Task<List<OfferPageDetail>> GetPageDetailsAsync(IReadOnlyList<Guid> ids)
         {
             if (ids.Count == 0)
@@ -128,11 +175,7 @@ namespace AF_mobile_web_api.Repositories
                 {
                     Id = p.Id,
                     Url = p.Url,
-                    Title = p.Title,
-                    FirstPrice = _dbSet.Where(o => o.Url == p.Url)
-                        .OrderBy(o => o.AddedRecordTime)
-                        .Select(o => o.Price)
-                        .FirstOrDefault()
+                    Title = p.Title
                 })
                 .ToListAsync();
         }

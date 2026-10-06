@@ -1,4 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using System.IO.Compression;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Primitives;
+using Microsoft.Net.Http.Headers;
 using AF_mobile_web_api.Filters;
 using AF_mobile_web_api.Services.Interfaces;
 using AF_mobile_web_api.DTO;
@@ -11,34 +14,60 @@ namespace AF_mobile_web_api.Controllers
     {
         private readonly IRealEstateServices _realEstate;
         private readonly IStatisticServices _statisticServices;
-        private readonly IMorizonApiService _morizonApiService;
-        private readonly INieruchomosciOnlineService _nieruchomosciOnlineService;
         private readonly IPropertyListService _list;
         private readonly IScrapeJobRunner _scrapeRunner;
-        public RealEstateController(IRealEstateServices realEstate, IStatisticServices statisticServices, IMorizonApiService morizonApiService, INieruchomosciOnlineService nieruchomosciOnlineService, IPropertyListService list, IScrapeJobRunner scrapeRunner)
+        private readonly IMapPointsPayloadProvider _mapPoints;
+        private readonly ILogger<RealEstateController> _logger;
+        public RealEstateController(IRealEstateServices realEstate, IStatisticServices statisticServices, IPropertyListService list, IScrapeJobRunner scrapeRunner, IMapPointsPayloadProvider mapPoints, ILogger<RealEstateController> logger)
         {
             _realEstate = realEstate;
             _statisticServices = statisticServices;
-            _morizonApiService = morizonApiService;
-            _nieruchomosciOnlineService = nieruchomosciOnlineService;
             _list = list;
             _scrapeRunner = scrapeRunner;
+            _mapPoints = mapPoints;
+            _logger = logger;
         }
 
+        // Single-portal debug scrapes. Run inside the request they took minutes - past every
+        // proxy timeout - and could overlap a real scrape, so they go through the background
+        // runner like the full scrapes below and share its one-at-a-time flag: 202 when
+        // started, 409 while any scrape runs. They save nothing; the offer count goes to the log.
         [HttpGet("nieruchomosciOnline")]
         [RequireScrapeApiKey]
-        public async Task<IActionResult> getNieruchomosciOnlineAPI()
+        public IActionResult getNieruchomosciOnlineAPI()
         {
-            var result = await _nieruchomosciOnlineService.GetAllPagesAsync();
-            return Ok(result);           
+            return StartDebugScrape("NieruchomosciOnline", async services =>
+            {
+                var result = await services.GetRequiredService<INieruchomosciOnlineService>().GetAllPagesAsync();
+                return result?.Data?.Count ?? 0;
+            });
         }
-        
+
         [HttpGet("morizon")]
         [RequireScrapeApiKey]
-        public async Task<IActionResult> getMorizonAPI()
+        public IActionResult getMorizonAPI()
         {
-            var result = await _morizonApiService.GetPropertyListingDataAsync();
-            return Ok(result);           
+            return StartDebugScrape("Morizon", async services =>
+            {
+                var result = await services.GetRequiredService<IMorizonApiService>().GetPropertyListingDataAsync();
+                return result?.Data?.Count ?? 0;
+            });
+        }
+
+        // The scrape resolves its portal service from the job's own scope: this controller and
+        // its request-scoped services are gone long before the scrape ends.
+        private IActionResult StartDebugScrape(string portal, Func<IServiceProvider, Task<int>> scrape)
+        {
+            var jobName = $"{portal} (debug, not saved)";
+            var logger = _logger; // captured on its own so the job does not keep the controller alive
+
+            return _scrapeRunner.TryStart(jobName, async (IServiceProvider services) =>
+                {
+                    var offers = await scrape(services);
+                    logger.LogInformation("Scrape job {Job} returned {Count} offers", jobName, offers);
+                })
+                ? Accepted(new { message = $"{portal} scrape started" })
+                : Conflict(new { message = "A scrape is already running" });
         }
 
         // A full scrape outlives any reverse-proxy request timeout, so these two endpoints
@@ -62,7 +91,16 @@ namespace AF_mobile_web_api.Controllers
                 ? Accepted(new { message = "Scrape started for all cities" })
                 : Conflict(new { message = "A scrape is already running" });
         }
+
+        [HttpGet("scrapeStatus")]
+        public IActionResult GetScrapeStatus()
+        {
+            return Ok(new { isRunning = _scrapeRunner.IsRunning });
+        }
         
+        // Legacy public endpoints, kept for existing callers (DEPLOYMENT.md smoke-tests
+        // getUniqueOffers). All four read the dashboard's cached latest batch instead of
+        // querying the database per call; an unknown city is a 400.
         [HttpGet("getRealEstate/{city}")]
         public async Task<IActionResult> GetDefaultRealEstate(string city  = "Krakow")
         {
@@ -120,11 +158,59 @@ namespace AF_mobile_web_api.Controllers
             return Ok(result);
         }
 
+        // The biggest response the API serves, sent as the bytes MapPointsPayloadProvider
+        // compressed once rather than serialized and compressed per request. no-cache plus the
+        // entity tag lets the browser keep a copy and revalidate it: a map reopened after a
+        // reload costs a 304 until a scrape changes the points.
         [HttpGet("getMapPoints/{city}")]
         public async Task<IActionResult> GetMapPoints(string city)
         {
-            var result = await _statisticServices.GetMapPoints(city);
-            return Ok(result);
+            var payload = await _mapPoints.GetAsync(city);
+
+            var headers = Response.GetTypedHeaders();
+            headers.ETag = payload.ETag;
+            headers.CacheControl = new CacheControlHeaderValue { NoCache = true };
+            Response.Headers.Vary = HeaderNames.AcceptEncoding;
+
+            var request = Request.GetTypedHeaders();
+            if (request.IfNoneMatch.Any(tag => tag.Equals(EntityTagHeaderValue.Any) || tag.Compare(payload.ETag, useStrongComparison: false)))
+            {
+                return StatusCode(StatusCodes.Status304NotModified);
+            }
+
+            // Content-Encoding is set here, so the response compression middleware leaves the
+            // body alone instead of compressing it a second time.
+            if (Accepts(request.AcceptEncoding, "br"))
+            {
+                Response.Headers.ContentEncoding = "br";
+                return File(payload.Brotli, JsonContentType);
+            }
+
+            if (Accepts(request.AcceptEncoding, "gzip"))
+            {
+                Response.Headers.ContentEncoding = "gzip";
+                return File(payload.Gzip, JsonContentType);
+            }
+
+            // A client that takes neither (curl without --compressed): the plain JSON,
+            // decompressed on the way out rather than kept as a third copy.
+            return File(new GZipStream(new MemoryStream(payload.Gzip), CompressionMode.Decompress), JsonContentType);
+        }
+
+        private const string JsonContentType = "application/json; charset=utf-8";
+
+        // Whether Accept-Encoding allows the coding: its own entry decides, q=0 being a refusal;
+        // without one, a "*" entry does.
+        private static bool Accepts(IList<StringWithQualityHeaderValue> accepted, string coding)
+        {
+            var own = accepted.FirstOrDefault(value => StringSegment.Equals(value.Value, coding, StringComparison.OrdinalIgnoreCase));
+            if (own != null)
+            {
+                return (own.Quality ?? 1) > 0;
+            }
+
+            var any = accepted.FirstOrDefault(value => value.Value == "*");
+            return any != null && (any.Quality ?? 1) > 0;
         }
 
         [HttpGet("getPriceDrops/{city}")]
@@ -134,7 +220,7 @@ namespace AF_mobile_web_api.Controllers
             return Ok(result);
         }
 
-        // includeMapPoints=false leaves out the map points, which are ~98% of this payload
+        // includeMapPoints=false leaves out the map points, which are over 99% of this payload
         // and are only needed once the visitor opens a map; they are then fetched from
         // getMapPoints/{city}, which shares this endpoint's cache entry.
         [HttpGet("getFullDashboard/{city}")]

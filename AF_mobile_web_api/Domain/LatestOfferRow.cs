@@ -22,6 +22,13 @@ namespace AF_mobile_web_api.Domain
         public DateTime LastSeen { get; set; }
         public DateTime FirstSeen { get; set; }
         public int SnapshotCount { get; set; }
+
+        // The oldest price the portal actually stated for this Url - snapshots scraped with a
+        // 0 are skipped, as on the history page - or 0 when none of them had one. FirstSeen
+        // is still the oldest snapshot, priced or not. It rides along with the load so the
+        // list can filter and sort by the price change over the whole set of offers, not
+        // just the page it is about to render.
+        public double FirstPrice { get; set; }
     }
 
     // Display-only columns of one listed offer, fetched per page instead of being held in
@@ -31,6 +38,5 @@ namespace AF_mobile_web_api.Domain
         public Guid Id { get; set; }
         public string Url { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
-        public double FirstPrice { get; set; }
     }
 }

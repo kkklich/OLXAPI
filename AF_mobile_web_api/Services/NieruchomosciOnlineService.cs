@@ -14,9 +14,11 @@ namespace AF_mobile_web_api.Services
             PropertyNameCaseInsensitive = true
         };
         private readonly IHTTPClientServices _httpClient;
-        public NieruchomosciOnlineService(IHTTPClientServices httpClient)
+        private readonly ILogger<NieruchomosciOnlineService> _logger;
+        public NieruchomosciOnlineService(IHTTPClientServices httpClient, ILogger<NieruchomosciOnlineService> logger)
         {
             _httpClient = httpClient;
+            _logger = logger;
         }
 
         public async Task<MarketplaceSearch> GetAllPagesAsync(CityEnum city = CityEnum.Krakow)
@@ -30,7 +32,7 @@ namespace AF_mobile_web_api.Services
             string BaseUrlTemplate = $"https://{citySubdomain}.nieruchomosci-online.pl/szukaj.html?3,mieszkanie,sprzedaz,,{{0}},,,,{{1}}-{{2}}&ajax=1";
 
             var allResults = new ConcurrentBag<SearchData>();
-            // Ceiling division so the last partial range (e.g. 999000-1000000) is still fetched.
+            // Ceiling division so the last partial range (9999000-10000000) is still fetched.
             var priceRanges = Enumerable.Range(0, (maxPriceEnd - minPriceStart + step - 1) / step)
                 .Select(i => (Min: minPriceStart + i * step, Max: Math.Min(minPriceStart + (i + 1) * step, maxPriceEnd)))
                 .ToList();
@@ -72,34 +74,43 @@ namespace AF_mobile_web_api.Services
 
             try
             {
-                var response = await _httpClient.GetRaw(url, null, headers);
+                // GetRaw hands the response over, so it is released here
+                using var response = await _httpClient.GetRaw(url, null, headers);
                 // Ensure the request was successful
                 response.EnsureSuccessStatusCode();
                 // Read the response content as a string (likely JSON)
                 string responseBody = await response.Content.ReadAsStringAsync();
 
-                var itemsAdditional = ParseListAdditionalData(responseBody);
-                var itemsProps  = ParseListRecordPropsData(responseBody);
+                // One parse serves both halves of the page - the listings and their record props.
+                // A page is ~700 KB, most of it rendered HTML that neither half reads.
+                using var doc = JsonDocument.Parse(responseBody);
+                var itemsAdditional = ParseListAdditionalData(doc.RootElement);
+                var itemsProps = ParseListRecordPropsData(doc.RootElement);
 
                 var result = Convert(itemsAdditional, itemsProps);
 
                 return result;
             }
-            catch (HttpRequestException e)
+            catch (Exception ex)
             {
-                return null; // Or handle the error appropriately
+                // Not just HttpRequestException: a page that does not parse (JsonException, or
+                // InvalidOperationException for an unexpected JSON shape) or a timeout would
+                // otherwise escape Parallel.ForEachAsync in GetAllPagesAsync and discard every
+                // price range of the portal for this city. The caller skips null results.
+                _logger.LogError(ex, "Nieruchomosci-online page {Url} failed, skipping price range", url);
+                return null;
             }
         }
                 
-        private List<AdditionalData> ParseListAdditionalData(string json)
+        private List<AdditionalData> ParseListAdditionalData(JsonElement root)
         {
-            using var doc = JsonDocument.Parse(json);
-
-            if (!doc.RootElement.TryGetProperty("listAdditionalData", out var lad) ||
+            if (!root.TryGetProperty("listAdditionalData", out var lad) ||
                 lad.ValueKind != JsonValueKind.Object)
                 return new List<AdditionalData>();
 
-            var result = new List<AdditionalData>(lad.GetRawText().Length / 5000 + 1); // rough prealloc
+            // No capacity guess: GetRawText() would copy the whole payload into a new string
+            // just to size the list.
+            var result = new List<AdditionalData>();
 
             foreach (var prop in lad.EnumerateObject())
             {
@@ -116,15 +127,15 @@ namespace AF_mobile_web_api.Services
             return result;
         }
 
-        private List<RecordProps> ParseListRecordPropsData(string json)
+        private List<RecordProps> ParseListRecordPropsData(JsonElement root)
         {
-            json = json.Replace("record_props", "recordprops");
-            using var doc = JsonDocument.Parse(json);
-
-            if (!(doc.RootElement.TryGetProperty("pb", out var pbElement) &&  pbElement.TryGetProperty("recordprops", out var lad)))
+            // Looked up under its own name: renaming "record_props" in the raw text first copied
+            // the whole payload into a new string and parsed it a second time.
+            if (!(root.TryGetProperty("pb", out var pbElement) && pbElement.TryGetProperty("record_props", out var lad)))
                 return new List<RecordProps>();
             
-            var result = new List<RecordProps>(lad.GetRawText().Length / 5000 + 1); // rough prealloc
+            // No capacity guess, as in ParseListAdditionalData
+            var result = new List<RecordProps>();
 
             foreach (var prop in lad.EnumerateObject())
             {

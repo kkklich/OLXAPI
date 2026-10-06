@@ -48,6 +48,7 @@ builder.Services.AddScoped<IMorizonApiService, MorizonApiService>();
 builder.Services.AddScoped<IRealEstateServices, RealEstateServices>();
 builder.Services.AddScoped<IStatisticServices, StatisticServices>();
 builder.Services.AddScoped<IPropertyListService, PropertyListService>();
+builder.Services.AddScoped<IMapPointsPayloadProvider, MapPointsPayloadProvider>();
 
 // Singleton on purpose: it owns the "one scrape at a time" flag shared by all requests.
 builder.Services.AddSingleton<IScrapeJobRunner, ScrapeJobRunner>();
@@ -84,7 +85,6 @@ builder.Logging.AddConfiguration(builder.Configuration.GetSection("Logging"));
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
 builder.Logging.AddEventSourceLogger();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 
 // "AllowedOrigins:Frontend" may hold several origins separated by commas

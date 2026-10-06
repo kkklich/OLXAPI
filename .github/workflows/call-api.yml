@@ -4,14 +4,102 @@ on:
   schedule:
     # Every Sunday at 11:00 UTC (adjust if needed)
     - cron: '0 11 * * 0'
-  workflow_dispatch: # lets you run manually if you want
+  workflow_dispatch: # Allows manual run
 
 jobs:
   call-api:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
 
     steps:
-      - name: Call Render API endpoint
+      - name: Wake up Render and run weekly scrape
+        env:
+          SCRAPE_API_KEY: ${{ secrets.SCRAPE_API_KEY }}
+          RENDER_URL: "https://olxapi-jwcz.onrender.com"
         run: |
-          echo "Calling API..."
-          curl -X GET https://olxapi-jwcz.onrender.com/api/RealEstate/getdataForManyCities
+          set -euo pipefail
+
+          echo "============================================================"
+          echo "Step 1: Waking up Render service (cold start)..."
+          echo "============================================================"
+          WAKE_START=$(date +%s)
+          while true; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${RENDER_URL}/api/Health" || echo "000")
+            echo "$(date -u +'%T') - Ping /api/Health: HTTP $HTTP_CODE"
+
+            if [ "$HTTP_CODE" -eq 200 ]; then
+              echo "Render instance is awake and healthy!"
+              break
+            fi
+
+            ELAPSED=$(( $(date +%s) - WAKE_START ))
+            if [ "$ELAPSED" -ge 300 ]; then
+              echo "Error: Server failed to wake up within 5 minutes."
+              exit 1
+            fi
+            sleep 10
+          done
+
+          echo ""
+          echo "============================================================"
+          echo "Step 2: Triggering scrape job..."
+          echo "============================================================"
+          INIT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 \
+            -H "X-Api-Key: ${SCRAPE_API_KEY}" \
+            -X GET "${RENDER_URL}/api/RealEstate/getdataForManyCities" || echo "000")
+
+          echo "Trigger response: HTTP $INIT_STATUS"
+          if [ "$INIT_STATUS" == "202" ]; then
+            echo "Scrape successfully started."
+          elif [ "$INIT_STATUS" == "409" ]; then
+            echo "A scrape is already in progress, monitoring existing run."
+          elif [ "$INIT_STATUS" == "401" ]; then
+            echo "Error: HTTP 401 Unauthorized. Please verify SCRAPE_API_KEY secret in GitHub repository settings."
+            exit 1
+          else
+            echo "Error: Unexpected trigger status HTTP $INIT_STATUS"
+            exit 1
+          fi
+
+          echo ""
+          echo "============================================================"
+          echo "Step 3: Keeping Render alive and waiting for completion..."
+          echo "============================================================"
+          POLL_START=$(date +%s)
+          # Give background job time to initialize
+          sleep 30
+
+          while true; do
+            CURRENT_TIME=$(date -u +'%T')
+            ELAPSED_MIN=$(( ($(date +%s) - POLL_START) / 60 ))
+
+            # Check scrapeStatus endpoint
+            STATUS_JSON=$(curl -s --max-time 20 "${RENDER_URL}/api/RealEstate/scrapeStatus" || echo "{}")
+            IS_RUNNING=$(echo "$STATUS_JSON" | grep -o '"isRunning":[^,}]*' | cut -d: -f2 | tr -d ' ' || echo "")
+
+            if [ "$IS_RUNNING" == "false" ]; then
+              echo "$CURRENT_TIME (${ELAPSED_MIN}m elapsed) - Scrape job finished successfully!"
+              break
+            elif [ "$IS_RUNNING" == "true" ]; then
+              echo "$CURRENT_TIME (${ELAPSED_MIN}m elapsed) - Scrape in progress. Keeping Render alive..."
+            else
+              # Fallback before scrapeStatus endpoint is deployed:
+              # Send heartbeat to /api/Health to prevent 15-minute inactivity spin-down
+              HEALTH_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "${RENDER_URL}/api/Health" || echo "000")
+              echo "$CURRENT_TIME (${ELAPSED_MIN}m elapsed) - Heartbeat ping: HTTP $HEALTH_CODE. Keeping Render alive..."
+
+              # A full 2-city scrape typically finishes within ~45-50 minutes
+              if [ "$ELAPSED_MIN" -ge 65 ]; then
+                echo "Reached 65-minute timeout window in fallback mode. Render was kept alive throughout."
+                break
+              fi
+            fi
+
+            # Ping every 45 seconds (Render free tier sleeps after 15 minutes of inactivity)
+            sleep 45
+          done
+
+          echo ""
+          echo "============================================================"
+          echo "Scrape cycle completed successfully!"
+          echo "============================================================"
