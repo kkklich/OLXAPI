@@ -22,6 +22,7 @@ namespace AF_mobile_web_api.DTO
         public DateTime LastSeen { get; set; }
         public int SnapshotCount { get; set; }
         public double FirstPrice { get; set; }
-        public double PriceChange => Price - FirstPrice;
+        // Null when either price is 0 (not stated) - see OfferSnapshot.PriceChange.
+        public double? PriceChange { get; set; }
     }
 }

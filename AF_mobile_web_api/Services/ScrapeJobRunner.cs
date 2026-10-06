@@ -20,7 +20,13 @@ namespace AF_mobile_web_api.Services
 
         public bool IsRunning => Volatile.Read(ref _running) == 1;
 
-        public bool TryStart(string jobName, Func<IRealEstateServices, Task> job)
+        public bool TryStart(string jobName, Func<IRealEstateServices, Task> job) =>
+            TryStart(jobName, (IServiceProvider services) => job(services.GetRequiredService<IRealEstateServices>()));
+
+        // Any job, not just a full scrape: the single-portal debug scrapes run here too, so
+        // they share the one-at-a-time flag and cannot overlap a real run hammering the same
+        // portals.
+        public bool TryStart(string jobName, Func<IServiceProvider, Task> job)
         {
             if (Interlocked.CompareExchange(ref _running, 1, 0) != 0)
             {
@@ -34,10 +40,9 @@ namespace AF_mobile_web_api.Services
                     // The request's scoped services (DbContext included) are disposed when
                     // the response is sent, so the job needs its own scope.
                     using var scope = _scopeFactory.CreateScope();
-                    var realEstateServices = scope.ServiceProvider.GetRequiredService<IRealEstateServices>();
 
                     _logger.LogInformation("Scrape job {Job} started", jobName);
-                    await job(realEstateServices);
+                    await job(scope.ServiceProvider);
                     _logger.LogInformation("Scrape job {Job} finished", jobName);
                 }
                 catch (Exception ex)
