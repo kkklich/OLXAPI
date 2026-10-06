@@ -1,4 +1,4 @@
-﻿using AF_mobile_web_api.Domain;
+using AF_mobile_web_api.Domain;
 using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.DTO.Enums;
 using AF_mobile_web_api.Repositories.Interfaces;
@@ -49,6 +49,43 @@ namespace AF_mobile_web_api.Services
             return city;
         }
 
+        // The latest scrape of every city of the area, together.
+        private async Task<List<SearchData>> GetCachedRealEstateDataAsync(CityArea area)
+        {
+            var cacheKey = $"RealEstateData_{area.Name}";
+
+            if (_cache.TryGetValue(cacheKey, out List<SearchData> cached))
+            {
+                return cached;
+            }
+
+            // Sequential, one city at a time: the calls share the same scoped DbContext.
+            // Per city rather than one query over all of them, so each city contributes its
+            // own newest scrape even if they were not all scraped on the same day.
+            var results = new List<SearchData>();
+            foreach (var city in area.CityNames)
+            {
+                results.AddRange((await _realEstate.GetDataAsync(city)).Data);
+            }
+
+            if (area.IsMultiCity)
+            {
+                foreach (var offer in results.Where(x => x.Location != null))
+                {
+                    offer.Location.District = QualifiedDistrict(offer.Location.City, offer.Location.District);
+                }
+            }
+
+            var options = new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = CacheDuration
+            };
+
+            _cache.Set(cacheKey, results, options);
+
+            return results;
+        }
+
         // includeMapPoints = false returns the same dashboard without its map points. They
         // are over 99% of the payload (megabytes for Krakow, against ~16 KB for the charts
         // and insights - ARCHITECTURE.md section 5 has the measured sizes) and the page
@@ -56,9 +93,9 @@ namespace AF_mobile_web_api.Services
         // separately through getMapPoints/{city} - which is served from this very cache entry.
         public async Task<FullDashboardDTO> GetFullDashboardDataAsync(string cityName, bool includeMapPoints = true)
         {
-            var city = ParseCity(cityName);
+            var area = CityArea.Parse(cityName);
 
-            var cacheKey = $"FullDashboard_{city}";
+            var cacheKey = $"FullDashboard_{area.Name}";
             if (_cache.TryGetValue(cacheKey, out FullDashboardDTO cached))
             {
                 return Shape(cached, includeMapPoints);
@@ -66,8 +103,8 @@ namespace AF_mobile_web_api.Services
 
             // Sequential, not concurrent: both calls share the same scoped DbContext,
             // and EF Core throws if two operations run on it at the same time.
-            var timeline = await _propertyDataRepository.GetTimelineByCityAsync(city.ToString());
-            var results = await _realEstate.GetLatestBatchAsync(city);
+            var timeline = await _propertyDataRepository.GetTimelineByCitiesAsync(area.CityNames);
+            var results = await GetCachedRealEstateDataAsync(area);
 
             // Everything below that sorts or groups the offers is computed once here and handed
             // to both the charts and the insights, which publish the same figures.
@@ -266,10 +303,10 @@ namespace AF_mobile_web_api.Services
 
         public async Task<List<TimelinePriceDTO>> GetTimelinePrice(string cityName)
         {
-            var city = ParseCity(cityName);
+            var area = CityArea.Parse(cityName);
 
             // grouped and sorted in SQL - avoids loading every property row into memory
-            var groupedData = await _propertyDataRepository.GetTimelineByCityAsync(city.ToString());
+            var groupedData = await _propertyDataRepository.GetTimelineByCitiesAsync(area.CityNames);
 
             return PricedDays(groupedData)
                 .Select(x => new TimelinePriceDTO
@@ -358,6 +395,28 @@ namespace AF_mobile_web_api.Services
         private static List<SearchData> GetValidOffers(List<SearchData> results) =>
             results.Where(x => x.Price > 0 && x.PricePerMeter > 0 && x.Area > 0).ToList();
 
+        // Groups valid offers by district, dropping districts with too few offers to trust the median.
+        private static List<IGrouping<string, SearchData>> GroupByDistrict(List<SearchData> validOffers) =>
+            validOffers
+                .Where(x => !string.IsNullOrWhiteSpace(x.Location?.District))
+                .GroupBy(x => x.Location.District)
+                .Where(g => g.Count() >= MinOffersPerDistrict)
+                .ToList();
+
+        // A district as an area of several cities labels it: with its city, since "Centrum" in
+        // Chorzów and "Centrum" in Sosnowiec are different places. An offer the portal gave no
+        // district - common in the smaller towns - still counts towards its city.
+        private static string QualifiedDistrict(string? city, string? district)
+        {
+            var cityName = CityExtensions.DisplayNameOf(city);
+
+            if (string.IsNullOrWhiteSpace(district)
+                || string.Equals(district, cityName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(district, city, StringComparison.OrdinalIgnoreCase))
+                return cityName;
+
+            return $"{cityName} – {district}";
+        }
         private static List<SplitSliceDTO> BuildSplit(List<SearchData> validOffers, Func<SearchData, string> keySelector)
         {
             return validOffers
@@ -393,13 +452,34 @@ namespace AF_mobile_web_api.Services
 
         public async Task<List<PriceDropDTO>> GetPriceDrops(string cityName, int limit)
         {
-            var city = ParseCity(cityName);
+            var area = CityArea.Parse(cityName);
             limit = Math.Clamp(limit, 1, MaxPriceDrops);
 
-            var cacheKey = $"PriceDrops_{city}";
+            var cacheKey = $"PriceDrops_{area.Name}";
             if (!_cache.TryGetValue(cacheKey, out List<PriceDropDTO> drops))
             {
-                drops = await _propertyDataRepository.GetPriceDropsAsync(city.ToString(), MaxPriceDrops);
+                // Each city diffs its own two latest scrapes; an area ranks the drops of all of them.
+                drops = new List<PriceDropDTO>();
+                foreach (var city in area.CityNames)
+                {
+                    drops.AddRange(await _propertyDataRepository.GetPriceDropsAsync(city, MaxPriceDrops));
+                }
+
+                if (area.IsMultiCity)
+                {
+                    foreach (var drop in drops)
+                    {
+                        drop.District = QualifiedDistrict(drop.City, drop.District);
+                    }
+
+                    // One entry per Url, as for a single city - the page tracks its rows by Url.
+                    drops = drops
+                        .GroupBy(d => d.Url)
+                        .Select(g => g.OrderByDescending(d => d.DropPercent).First())
+                        .OrderByDescending(d => d.DropPercent)
+                        .Take(MaxPriceDrops)
+                        .ToList();
+                }
 
                 _cache.Set(cacheKey, drops, new MemoryCacheEntryOptions
                 {
@@ -546,9 +626,9 @@ namespace AF_mobile_web_api.Services
         {
             // Canonicalize before caching: the raw string becomes an IMemoryCache key, so any
             // garbage/differently-cased value would add a permanent cache entry plus a DB query.
-            var parsedCity = ParseCity(city);
+            var area = CityArea.Parse(city);
 
-            var results = await _realEstate.GetLatestBatchAsync(parsedCity);
+            var results = await GetCachedRealEstateDataAsync(area);
             return GetBarChartDataByBuildingType(results, groupedBy);
 
         }
@@ -714,9 +794,9 @@ namespace AF_mobile_web_api.Services
         {
             // Canonicalize before caching: the raw string becomes an IMemoryCache key, so any
             // garbage/differently-cased value would add a permanent cache entry plus a DB query.
-            var parsedCity = ParseCity(city);
+            var area = CityArea.Parse(city);
 
-            var results = await _realEstate.GetLatestBatchAsync(parsedCity);
+            var results = await GetCachedRealEstateDataAsync(area);
 
             var groupedStats = GetDataWithGroupStatistics(results, groupBy);
             var fullChart = BuildChartData(groupedStats);

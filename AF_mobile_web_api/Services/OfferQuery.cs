@@ -1,3 +1,4 @@
+using AF_mobile_web_api.Domain;
 using AF_mobile_web_api.DTO;
 
 namespace AF_mobile_web_api.Services
@@ -48,7 +49,7 @@ namespace AF_mobile_web_api.Services
 
         private static List<OfferSnapshot> Filter(IReadOnlyList<OfferSnapshot> offers, PropertyQueryParams query)
         {
-            var city = Key(query.City);
+            var cities = CityKeys(query.City);
             var market = Key(query.Market);
             var buildingType = Key(query.BuildingType);
             // The per-column text filters match the way Search does - a substring of the
@@ -62,7 +63,7 @@ namespace AF_mobile_web_api.Services
 
             foreach (var offer in offers)
             {
-                if (city != null && !string.Equals(offer.CityKey, city, StringComparison.Ordinal)) continue;
+                if (cities != null && !cities.Contains(offer.CityKey)) continue;
                 if (market != null && !string.Equals(offer.MarketKey, market, StringComparison.Ordinal)) continue;
                 if (buildingType != null && !string.Equals(offer.BuildingTypeKey, buildingType, StringComparison.Ordinal)) continue;
                 if (district != null && !offer.DistrictKey.Contains(district, StringComparison.Ordinal)) continue;
@@ -111,6 +112,19 @@ namespace AF_mobile_web_api.Services
         /// A filter value, folded for comparison; null when the filter is not set.
         private static string? Key(string? value) =>
             string.IsNullOrWhiteSpace(value) ? null : OfferText.Fold(value);
+
+        /// The city keys a city filter selects: every city of an area such as "Silesia" (its
+        // offers keep their own city), otherwise just the value; null when the filter is not set.
+        private static HashSet<string>? CityKeys(string? value)
+        {
+            var key = Key(value);
+            if (key == null)
+                return null;
+
+            return CityArea.TryParse(value, out var area) && area.IsMultiCity
+                ? area.CityNames.Select(OfferText.Fold).ToHashSet(StringComparer.Ordinal)
+                : new HashSet<string>(StringComparer.Ordinal) { key };
+        }
 
         /// A substring filter value, folded like the keys it is matched against: trailing
         /// spaces are dropped, leading ones kept. filterMapPoints trims the same way, so the

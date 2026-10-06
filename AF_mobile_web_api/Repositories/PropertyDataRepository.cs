@@ -1,4 +1,4 @@
-﻿using AF_mobile_web_api.Domain;
+using AF_mobile_web_api.Domain;
 using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.Repositories.Interfaces;
 using ApplicationDatabase;
@@ -23,7 +23,7 @@ namespace AF_mobile_web_api.Repositories
         // with a per-row DateTime.UtcNow, so each offer has a distinct microsecond value (e.g.
         // Katowice's newest scrape holds ~5800 rows spread over ~11:36:28.0092xx). Matching the
         // exact MAX(AddedRecordTime) then returns a single row - the reason the dashboard showed
-        // "1 active offer". Grouping by day mirrors GetTimelineByCityAsync and, with weekly
+        // "1 active offer". Grouping by day mirrors GetTimelineByCitiesAsync and, with weekly
         // scrapes, cleanly isolates the latest run.
         public async Task<List<PropertyData>> GetLatestByCityAsync(string city)
         {
@@ -42,17 +42,15 @@ namespace AF_mobile_web_api.Repositories
                 .ToListAsync();
         }
 
-        // One point per scrape day. Price and PricePerMeter are each averaged only over the rows
-        // that carry them: 0 means the portal did not say, and averaging it in dragged the trend
-        // down and made it jump with the share of unpriced rows in each scrape. The conditional
-        // selectors translate to AVG(CASE WHEN ... THEN ... END), and AVG skips the NULLs. A day
-        // with no priced rows averages to NULL, hence the "?? 0" (0 again meaning "unknown")
-        // instead of a materialization exception. Count stays every row of the day - the
-        // dashboard shows it as offers per scrape.
-        public async Task<List<TimelineGroup>> GetTimelineByCityAsync(string city)
+        // One point per scrape day over all the given cities together - an area's cities are
+        // scraped in the same weekly run, so their rows share its days. Price and PricePerMeter
+        // are each averaged only over the rows that carry them: 0 means the portal did not say,
+        // and averaging it in dragged the trend down and made it jump with the share of unpriced
+        // rows in each scrape.
+        public async Task<List<TimelineGroup>> GetTimelineByCitiesAsync(IReadOnlyCollection<string> cities)
         {
             return await _dbSet
-                .Where(p => p.City == city)
+                .Where(p => cities.Contains(p.City))
                 .GroupBy(p => p.AddedRecordTime.Date)
                 .Select(g => new TimelineGroup
                 {

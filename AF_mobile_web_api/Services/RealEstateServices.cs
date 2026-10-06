@@ -1,4 +1,4 @@
-﻿using AF_mobile_web_api.Domain;
+using AF_mobile_web_api.Domain;
 using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.DTO.Enums;
 using AF_mobile_web_api.Repositories.Interfaces;
@@ -148,13 +148,15 @@ namespace AF_mobile_web_api.Services
 
             await _propertyDataRepository.SaveMarketplaceDataAsync(propertiesList);
 
-            // These per-city entries (the latest batch, cached by GetLatestBatchAsync, the
-            // dashboard slices StatisticServices builds from it and the compressed map points)
-            // live for 120 minutes; evict them so dashboards pick up the freshly scraped batch
-            // instead of serving stale data.
-            _cache.Remove($"RealEstateData_{city}");
-            _cache.Remove($"FullDashboard_{city}");
-            _cache.Remove($"PriceDrops_{city}");
+            // StatisticServices caches these entries for 120 minutes, per city and per area of
+            // cities (CityArea); evict every one that includes this city so dashboards pick up
+            // the freshly scraped batch instead of serving stale data.
+            foreach (var name in CityArea.NamesIncluding(city))
+            {
+                _cache.Remove($"RealEstateData_{name}");
+                _cache.Remove($"FullDashboard_{name}");
+                _cache.Remove($"PriceDrops_{name}");
+            }
             _cache.Remove(MapPointsPayloadProvider.CacheKey(city));
 
             // The offers list is served from a deduplicated snapshot of every city at once,
