@@ -1,4 +1,4 @@
-using AF_mobile_web_api.DTO.Enums;
+using AF_mobile_web_api.Domain;
 using AF_mobile_web_api.Services.Interfaces;
 
 namespace AF_mobile_web_api.Services
@@ -6,9 +6,12 @@ namespace AF_mobile_web_api.Services
     // Builds the read caches once at startup instead of letting the first visitor build them.
     //
     // All are expensive and none depends on the request: the offers snapshot is a
-    // full-table scan (~7s), and each city's dashboard and price drops are scans of that
-    // city's rows. The API sleeps when idle on Render, so without this every visit after an
+    // full-table scan (~7s), and each dashboard's statistics and price drops are scans of
+    // its cities' rows. The API sleeps when idle on Render, so without this every visit after an
     // idle period pays for them - and the offers list, which nobody opens first, pays most.
+    //
+    // Only what the dashboard offers is warmed (Krakow, Silesia), not each Silesian city on
+    // its own as well: nothing requests those, and each would hold its own copy of the rows.
     //
     // Deliberately tolerant: a warm-up failure (the database is unreachable, say) must never
     // stop the API from starting. The request path builds the same caches on demand anyway.
@@ -35,33 +38,25 @@ namespace AF_mobile_web_api.Services
 
             await WarmAsync("offers snapshot", () => _offers.GetAsync(), stoppingToken);
 
-            foreach (CityEnum city in Enum.GetValues<CityEnum>())
+            foreach (var area in CityArea.DashboardAreas)
             {
                 if (stoppingToken.IsCancellationRequested)
                     return;
 
-                await WarmAsync($"dashboard {city}", async () =>
+                await WarmAsync($"dashboard {area.Name}", async () =>
                 {
                     using var scope = _scopeFactory.CreateScope();
                     var statistics = scope.ServiceProvider.GetRequiredService<IStatisticServices>();
-                    await statistics.GetFullDashboardDataAsync(city.ToString());
+                    await statistics.GetFullDashboardDataAsync(area.Name);
                 }, stoppingToken);
 
-                // Built from the dashboard just cached: serializing and compressing the map
-                // points is the rest of what the first map opened would otherwise wait for.
-                await WarmAsync($"map points {city}", async () =>
-                {
-                    using var scope = _scopeFactory.CreateScope();
-                    var mapPoints = scope.ServiceProvider.GetRequiredService<IMapPointsPayloadProvider>();
-                    await mapPoints.GetAsync(city.ToString());
-                }, stoppingToken);
 
                 // Requested alongside the dashboard on every visit, and ~1.8s to build cold.
-                await WarmAsync($"price drops {city}", async () =>
+                await WarmAsync($"price drops {area.Name}", async () =>
                 {
                     using var scope = _scopeFactory.CreateScope();
                     var statistics = scope.ServiceProvider.GetRequiredService<IStatisticServices>();
-                    await statistics.GetPriceDrops(city.ToString(), 1);
+                    await statistics.GetPriceDrops(area.Name, 1);
                 }, stoppingToken);
             }
         }
