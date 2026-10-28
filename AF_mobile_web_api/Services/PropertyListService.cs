@@ -21,8 +21,8 @@ namespace AF_mobile_web_api.Services
             _offers = offers;
         }
 
-        // Filtering, sorting and paging happen over the in-memory offers snapshot; only the
-        // columns the page renders (Url, Title) are read from the database, by primary key.
+        // Filtering, sorting and paging happen over the in-memory offers snapshot. Display
+        // details (including the original title) are then fetched by primary key for that page.
         // See OfferQuery for why the query this replaced could not stay in SQL.
         public async Task<PagedResultDTO<PropertyListItemDTO>> GetPagedAsync(PropertyQueryParams query)
         {

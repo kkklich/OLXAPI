@@ -57,6 +57,7 @@ namespace AF_mobile_web_api.Services
             // free-text box the page already had.
             var district = Search(query.District);
             var title = Search(query.Title);
+            var url = string.IsNullOrWhiteSpace(query.Url) ? null : query.Url.Trim();
             var search = Search(query.Search);
 
             var matches = new List<OfferSnapshot>();
@@ -68,6 +69,7 @@ namespace AF_mobile_web_api.Services
                 if (buildingType != null && !string.Equals(offer.BuildingTypeKey, buildingType, StringComparison.Ordinal)) continue;
                 if (district != null && !offer.DistrictKey.Contains(district, StringComparison.Ordinal)) continue;
                 if (title != null && !offer.TitleKey.Contains(title, StringComparison.Ordinal)) continue;
+                if (url != null && !offer.Url.Contains(url, StringComparison.OrdinalIgnoreCase)) continue;
                 if (query.WebName.HasValue && offer.WebName != query.WebName.Value) continue;
                 if (query.Private.HasValue && offer.Private != query.Private.Value) continue;
                 // A 0 price, price per m² or area is one the portal did not state, so it is

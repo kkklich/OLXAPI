@@ -16,6 +16,7 @@ namespace AF_mobile_web_api.DTO
         // before the list grew a filter per column; nothing sent it.
         public string? District { get; set; }
         public string? Title { get; set; } // substring match on Title alone
+        public string? Url { get; set; } // case-insensitive substring of the listing URL
         // "primary" | "secondary" (mapped to the stored Polish values), or a raw
         // stored value ("Pierwotny"/"Wtórny") passed through unchanged.
         public string? Market { get; set; }

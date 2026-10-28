@@ -8,6 +8,7 @@ namespace AF_mobile_web_api.Domain
     {
         public Guid Id { get; set; }
         public string Title { get; set; } = string.Empty;
+        public string Url { get; set; } = string.Empty;
         public double Price { get; set; }
         public double PricePerMeter { get; set; }
         public int Floor { get; set; }
@@ -31,8 +32,8 @@ namespace AF_mobile_web_api.Domain
         public double FirstPrice { get; set; }
     }
 
-    // Display-only columns of one listed offer, fetched per page instead of being held in
-    // memory for all ~95k offers (see OfferSnapshotCache).
+    // Display columns of one listed offer. The snapshot keeps the URL for filtering
+    // and only a title comparison key; this fetch supplies the original title.
     public class OfferPageDetail
     {
         public Guid Id { get; set; }

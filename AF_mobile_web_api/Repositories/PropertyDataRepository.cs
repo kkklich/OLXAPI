@@ -108,8 +108,8 @@ namespace AF_mobile_web_api.Repositories
                     SnapshotCount = g.Count()
                 });
 
-            // Url and Title are left out on purpose: they are the widest columns and are
-            // only needed for the rows one page actually renders (GetPageDetailsAsync).
+            // Include Url for filtering before paging. The snapshot retains only a folded
+            // title; its display text is fetched for the selected page.
             //
             // The second join reads the first price, which the list needs to filter and sort
             // by the price change over every offer rather than only the ten it renders. That
@@ -152,6 +152,7 @@ namespace AF_mobile_web_api.Repositories
                         City = x.Newest.City,
                         District = x.Newest.District,
                         Title = x.Newest.Title,
+                        Url = x.Newest.Url,
                         LastSeen = x.Newest.AddedRecordTime,
                         FirstSeen = x.Aggregates.FirstSeen,
                         SnapshotCount = x.Aggregates.SnapshotCount,
@@ -160,8 +161,8 @@ namespace AF_mobile_web_api.Repositories
                 .AsAsyncEnumerable();
         }
 
-        // The display-only columns of the offers on one page, by primary key: the Url and
-        // Title kept out of the in-memory snapshot. The first price used to be read here too,
+        // Display columns for one page, by primary key, including the original title that
+        // the snapshot holds only as a comparison key. The first price was read here too,
         // as a correlated subquery over the longtext Url once per rendered row; it now comes
         // from the snapshot, which the list also filters and sorts by.
         public async Task<List<OfferPageDetail>> GetPageDetailsAsync(IReadOnlyList<Guid> ids)
