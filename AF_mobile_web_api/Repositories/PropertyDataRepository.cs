@@ -329,5 +329,10 @@ namespace AF_mobile_web_api.Repositories
                 .ToList();
         }
 
+
+        public async Task<DateTime?> GetLatestScrapeTimeAsync()
+        {
+            return await _dbSet.MaxAsync(p => (DateTime?)p.AddedRecordTime);
+        }
     }
 }

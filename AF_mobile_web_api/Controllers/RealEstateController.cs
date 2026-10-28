@@ -1,3 +1,4 @@
+using AF_mobile_web_api.Repositories.Interfaces;
 using System.IO.Compression;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Primitives;
@@ -93,9 +94,23 @@ namespace AF_mobile_web_api.Controllers
         }
 
         [HttpGet("scrapeStatus")]
-        public IActionResult GetScrapeStatus()
+        public async Task<IActionResult> GetScrapeStatus([FromServices] IPropertyDataRepository propertyRepo)
         {
-            return Ok(new { isRunning = _scrapeRunner.IsRunning });
+            DateTime? lastScrapedAt = null;
+            try
+            {
+                lastScrapedAt = await propertyRepo.GetLatestScrapeTimeAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to get latest scrape time");
+            }
+
+            return Ok(new
+            {
+                isRunning = _scrapeRunner.IsRunning,
+                lastScrapedAt = lastScrapedAt
+            });
         }
         
         // Legacy public endpoints, kept for existing callers (DEPLOYMENT.md smoke-tests
