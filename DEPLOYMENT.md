@@ -435,6 +435,30 @@ journalctl -u realestate-api -f
 
 ## 9. Scheduled scraping
 
+The OLX downloader limits active price ranges to three, times out each request after
+30 seconds and retries temporary network/HTTP 408, 429 and 5xx failures up to three
+attempts. It honors `Retry-After` up to two minutes; a longer pause ends that range
+as incomplete. Configure these defaults with `OlxScrape__MaxConcurrentBuckets`,
+`OlxScrape__RequestTimeoutSeconds`, `OlxScrape__MaxAttempts`,
+`OlxScrape__RetryDelayMilliseconds` (default 2000), and
+`OlxScrape__PageDelayMilliseconds` (default 250).
+
+Successfully downloaded pages and other sources are saved even if one source
+fails. `/api/RealEstate/scrapeStatus` exposes `lastRunSucceeded`,
+`lastCompletedAt` and a safe source/city summary in `lastError`; idle alone does
+not mean success. Job outcomes are held in memory and become unknown after an
+API restart; `lastScrapedAt` still comes from saved database rows. The weekly
+workflow requires explicit success and fails after 225 minutes of monitoring.
+Deploy the API before running this updated workflow. OLX currently has city ids
+configured only for Krakow and Katowice; other cities intentionally skip OLX.
+
+Run downloader, persistence and job-status regression tests with:
+
+```powershell
+dotnet test AF_mobile_web_api.Tests/AF_mobile_web_api.Tests.csproj
+```
+
+
 `.github/workflows/call-api.yml` runs every Sunday 11:00 UTC and curls
 the old Render URL without an API key. After migrating, update it — or move the
 schedule onto the VPS, which is more reliable and keeps the key off GitHub:

@@ -42,6 +42,7 @@ builder.Services.AddScoped<IPropertyDataRepository, PropertyDataRepository>();
 
 builder.Services.AddScoped<IPropertyComparer, PropertyComparer>();
 
+builder.Services.Configure<OlxScrapeOptions>(builder.Configuration.GetSection("OlxScrape"));
 builder.Services.AddScoped<IOLXAPIService, OLXAPIService>();
 builder.Services.AddScoped<INieruchomosciOnlineService, NieruchomosciOnlineService>();
 builder.Services.AddScoped<IMorizonApiService, MorizonApiService>();

@@ -83,11 +83,17 @@ namespace AF_mobile_web_api.Services
        
         public async Task<MarketplaceSearch> GetdataForManyCitiesAsync()
         {
+            var failures = new List<Exception>();
             foreach (CityEnum city in Enum.GetValues(typeof(CityEnum)))
             {
-                await LoadDataMarkeplacesAsync(city);
+                try { await LoadDataMarkeplacesAsync(city); }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Scrape incomplete for {City}; continuing with other cities", city);
+                    failures.Add(ex);
+                }
             }
-
+            if (failures.Count > 0) throw new AggregateException("Some cities could not be fully downloaded.", failures);
             return new MarketplaceSearch();
         }
 
@@ -99,23 +105,26 @@ namespace AF_mobile_web_api.Services
             var morizonTask = _morizonApiService.GetPropertyListingDataAsync(city);
             var olxTask = _olxApiService.GetOLXResponse(city);
 
-            var olxData = await GetSourceDataSafeAsync(olxTask, "OLX", city);
+            var olxData = await GetSourceDataSafeAsync(olxTask, "OLX", city, city.ToEncodedOLXString() != 0);
             var morizonData = await GetSourceDataSafeAsync(morizonTask, "Morizon", city);
             var nieruchomosciData = await GetSourceDataSafeAsync(nieruchomosciTask, "NieruchomosciOnline", city);
 
             var combinedData = new MarketplaceSearch
             {
-                Data = olxData
-                    .Union(morizonData)
-                    .Union(nieruchomosciData)
+                Data = olxData.Data
+                    .Union(morizonData.Data)
+                    .Union(nieruchomosciData.Data)
                     .ToList()
             };
+            var failures = new[] { olxData.Error, morizonData.Error, nieruchomosciData.Error }
+                .OfType<Exception>().ToList();
 
             if (combinedData.Data.Count == 0)
             {
                 // Saving an empty batch would become the "latest" snapshot downstream
                 // (GetLatestByCityAsync) and wipe the dashboard until the next scrape.
                 _logger.LogError("All marketplace sources returned no data for {City}; skipping save", city);
+                if (failures.Count > 0) throw new AggregateException(failures);
                 return combinedData;
             }
 
@@ -163,20 +172,26 @@ namespace AF_mobile_web_api.Services
             // so it is rebuilt as a whole - the rows just saved are new newest-snapshots.
             _offers.Invalidate();
 
+            if (failures.Count > 0) throw new AggregateException(failures);
             return combinedData;
         }
 
-        private async Task<List<SearchData>> GetSourceDataSafeAsync(Task<MarketplaceSearch> sourceTask, string sourceName, CityEnum city)
+        private async Task<(List<SearchData> Data, Exception? Error)> GetSourceDataSafeAsync(
+            Task<MarketplaceSearch> sourceTask, string sourceName, CityEnum city, bool required = true)
         {
             try
             {
                 var result = await sourceTask;
-                return result?.Data ?? new List<SearchData>();
+                var data = result?.Data ?? new List<SearchData>();
+                if (required && data.Count == 0)
+                    throw new InvalidOperationException("Source returned no offers.");
+                return (data, null);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Marketplace source {Source} failed for {City}; continuing with the remaining sources", sourceName, city);
-                return new List<SearchData>();
+                var retained = ex is PartialScrapeException partial ? partial.Offers.ToList() : new List<SearchData>();
+                return (retained, new ScrapeSourceException(sourceName, city, ex));
             }
         }
 

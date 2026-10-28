@@ -2,14 +2,15 @@ name: Weekly API Call
 
 on:
   schedule:
-    # Every Sunday at 11:00 UTC (adjust if needed)
+    # Every Sunday at 11:00 Warsaw time (automatically adjusts for DST)
     - cron: '0 11 * * 0'
+      timezone: 'Europe/Warsaw'
   workflow_dispatch: # Allows manual run
 
 jobs:
   call-api:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 240
 
     steps:
       - name: Wake up Render and run weekly scrape
@@ -73,26 +74,29 @@ jobs:
             CURRENT_TIME=$(date -u +'%T')
             ELAPSED_MIN=$(( ($(date +%s) - POLL_START) / 60 ))
 
-            # Check scrapeStatus endpoint
-            STATUS_JSON=$(curl -s --max-time 20 "${RENDER_URL}/api/RealEstate/scrapeStatus" || echo "{}")
-            IS_RUNNING=$(echo "$STATUS_JSON" | grep -o '"isRunning":[^,}]*' | cut -d: -f2 | tr -d ' ' || echo "")
+            if [ "$ELAPSED_MIN" -ge 225 ]; then
+              echo "Error: Scrape did not complete within 225 minutes."
+              exit 1
+            fi
+            STATUS_JSON=$(curl --fail -s --max-time 20 "${RENDER_URL}/api/RealEstate/scrapeStatus" || echo '{}')
+            IS_RUNNING=$(jq -r 'if (.isRunning | type) == "boolean" then .isRunning else "unknown" end' <<< "$STATUS_JSON" 2>/dev/null || echo unknown)
 
             if [ "$IS_RUNNING" == "false" ]; then
+              SUCCEEDED=$(jq -r 'if (.lastRunSucceeded | type) == "boolean" then .lastRunSucceeded else "unknown" end' <<< "$STATUS_JSON")
+              if [ "$SUCCEEDED" != "true" ]; then
+                echo "Error: Scrape stopped without a successful result. Status:"
+                jq '{isRunning, lastRunSucceeded, lastCompletedAt, lastError}' <<< "$STATUS_JSON"
+                exit 1
+              fi
               echo "$CURRENT_TIME (${ELAPSED_MIN}m elapsed) - Scrape job finished successfully!"
               break
             elif [ "$IS_RUNNING" == "true" ]; then
               echo "$CURRENT_TIME (${ELAPSED_MIN}m elapsed) - Scrape in progress. Keeping Render alive..."
             else
-              # Fallback before scrapeStatus endpoint is deployed:
-              # Send heartbeat to /api/Health to prevent 15-minute inactivity spin-down
+              # Keep the service awake through temporary status failures.
               HEALTH_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "${RENDER_URL}/api/Health" || echo "000")
               echo "$CURRENT_TIME (${ELAPSED_MIN}m elapsed) - Heartbeat ping: HTTP $HEALTH_CODE. Keeping Render alive..."
 
-              # A full 2-city scrape typically finishes within ~45-50 minutes
-              if [ "$ELAPSED_MIN" -ge 65 ]; then
-                echo "Reached 65-minute timeout window in fallback mode. Render was kept alive throughout."
-                break
-              fi
             fi
 
             # Ping every 45 seconds (Render free tier sleeps after 15 minutes of inactivity)

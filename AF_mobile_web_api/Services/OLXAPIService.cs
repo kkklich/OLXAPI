@@ -1,191 +1,174 @@
-﻿using AF_mobile_web_api.Domain;
+using System.Net;
+using AF_mobile_web_api.Domain;
 using AF_mobile_web_api.DTO.Enums;
 using AF_mobile_web_api.Helper;
 using AF_mobile_web_api.Services.Interfaces;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AF_mobile_web_api.Services
 {
-    public class OLXAPIService: IOLXAPIService
+    public class OLXAPIService : IOLXAPIService
     {
         private readonly IHTTPClientServices _httpClient;
         private readonly ILogger<OLXAPIService> _logger;
-        public OLXAPIService(IHTTPClientServices httpClient, ILogger<OLXAPIService> logger)
+        private readonly OlxScrapeOptions _options;
+
+        public OLXAPIService(IHTTPClientServices httpClient, ILogger<OLXAPIService> logger,
+            IOptions<OlxScrapeOptions> options)
         {
             _httpClient = httpClient;
             _logger = logger;
+            _options = options.Value;
         }
 
-        public  async Task<List<SearchData>> GetAllOffersAsync(
-       int categoryId,
-       int? regionId,
-       int? cityId,
-       int priceFrom,
-       int priceTo
-       )
+        private sealed record RangeResult(List<SearchData> Offers, Exception? Error = null);
+
+        public async Task<List<SearchData>> GetAllOffersAsync(
+            int categoryId, int? regionId, int? cityId, int priceFrom, int priceTo)
         {
-            int priceBucket = 50000;
-            int offsetStart = 0;
+            const int bucketSize = 50_000;
+            var ranges = new List<(int From, int To)>();
+            for (var from = priceFrom; from <= priceTo; from += bucketSize)
+                ranges.Add((from, Math.Min(from + bucketSize - 1, priceTo)));
 
-            var buckets = new List<(int from, int to)>();
-            for (int from = priceFrom; from <= priceTo; from += priceBucket)
+            // Previously every one of ~200 ranges started an HTTP request immediately.
+            using var slots = new SemaphoreSlim(Math.Clamp(_options.MaxConcurrentBuckets, 1, 8));
+            Exception? permanentFailure = null;
+            var tasks = ranges.Select(async range =>
             {
-                int to = Math.Min(from + priceBucket - 1, priceTo);
-                buckets.Add((from, to)); // one bucket per task [web:26]
-            }
+                await slots.WaitAsync();
+                try
+                {
+                    var fatal = Volatile.Read(ref permanentFailure);
+                    if (fatal != null) return new RangeResult(new(), fatal);
+                    var result = await FetchRangeAsync(categoryId, regionId, cityId, range.From, range.To);
+                    // Do not hammer an endpoint that rejects our query or denies access.
+                    if (result.Error is HttpRequestException http && http.StatusCode is
+                        HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
+                        Interlocked.CompareExchange(ref permanentFailure, result.Error, null);
+                    return result;
+                }
+                finally { slots.Release(); }
+            });
+            var results = await Task.WhenAll(tasks);
+            var offers = results.SelectMany(result => result.Offers).DistinctBy(offer => offer.Id).ToList();
+            var failures = results.Where(result => result.Error != null).ToList();
+            if (failures.Count > 0)
+                throw new PartialScrapeException(
+                    $"OLX download incomplete for city_id {cityId}: {failures.Count}/{ranges.Count} price ranges failed; {offers.Count} offers retained.",
+                    offers, failures[0].Error!);
 
-            var tasks = new List<Task<List<SearchData>>>(buckets.Count);
-            foreach (var b in buckets)
-            {
-                tasks.Add(FetchRangeAllPagesSafeAsync(
-                    categoryId, regionId, cityId, b.from, b.to, offsetStart)); // one task per bucket
-            }
-
-            var results = await Task.WhenAll(tasks).ConfigureAwait(false); // run all and wait 
-            var all = new List<SearchData>();
-            foreach (var chunk in results)
-                all.AddRange(chunk); // flatten
-            return all; // merged list
+            _logger.LogInformation("OLX city_id {CityId}: downloaded {Count} offers in {Ranges} price ranges", cityId, offers.Count, ranges.Count);
+            return offers;
         }
 
-        // Isolates a single price bucket: a failed bucket logs and yields an empty list
-        // instead of failing the whole Task.WhenAll in GetAllOffersAsync
-        private async Task<List<SearchData>> FetchRangeAllPagesSafeAsync(
-            int categoryId,
-            int? regionId,
-            int? cityId,
-            int priceFrom,
-            int priceTo,
-            int offsetStart
-         )
+        private async Task<RangeResult> FetchRangeAsync(
+            int categoryId, int? regionId, int? cityId, int priceFrom, int priceTo)
         {
+            var offers = new List<SearchData>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            const int limit = 40;
+            const int maxOffset = 1000;
             try
             {
-                return await FetchRangeAllPagesAsync(categoryId, regionId, cityId, priceFrom, priceTo, offsetStart);
+                for (var offset = 0; offset < maxOffset; offset += limit)
+                {
+                    var data = await GetPageAsync(BuildOffersUrl(categoryId, regionId, cityId, priceFrom, priceTo, offset, limit));
+                    var page = data.Data;
+                    var newIds = page.Where(offer => offer != null && !string.IsNullOrWhiteSpace(offer.Id))
+                        .Where(offer => seen.Add(offer.Id)).ToList();
+                    offers.AddRange(ExtractListOfParameters(newIds));
+                    // Promoted offers repeat across pages. A repeated page is not more data.
+                    var visibleCount = data.metadata?.visible_total_count;
+                    if (offset + limit >= maxOffset && data.metadata?.total_elements > maxOffset)
+                        return new(offers, new InvalidOperationException("OLX search contains more offers than its pagination limit."));
+                    if (newIds.Count == 0 || (visibleCount > 0 && offset + limit >= visibleCount)
+                        || (visibleCount is null or <= 0 && page.Count < limit)) return new(offers);
+                    if (offset + limit >= maxOffset)
+                    {
+                        _logger.LogWarning("OLX pagination cap reached for {From}-{To}; retaining {Count} offers", priceFrom, priceTo, offers.Count);
+                        return new(offers, new InvalidOperationException("OLX pagination limit reached before the range was exhausted."));
+                    }
+                    await Task.Delay(Math.Clamp(_options.PageDelayMilliseconds, 0, 60_000));
+                }
+                return new(offers);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "OLX price bucket {PriceFrom}-{PriceTo} failed, skipping bucket", priceFrom, priceTo);
-                return new List<SearchData>();
+                _logger.LogError(ex, "OLX price bucket {PriceFrom}-{PriceTo} failed; retaining {Count} downloaded offers", priceFrom, priceTo, offers.Count);
+                return new(offers, ex);
             }
         }
 
-        // Fetch all pages for a single price range using offset/limit
-        private  async Task<List<SearchData>> FetchRangeAllPagesAsync(
-            int categoryId,
-            int? regionId,
-            int? cityId,
-            int priceFrom,
-            int priceTo,
-            int offsetStart
-         )
+        private async Task<QueryData> GetPageAsync(string url)
         {
-            var results = new List<SearchData>();
-            var offset = offsetStart;
-            const int limit = 40; //olx API limit 40
-            const int maxOffset = 1000; // OLX rejects deeper offsets; also guards against an endless loop
-
-            // Do-while style loop to ensure at least one request and then continue while page returns items
-            while (true)
+            var attempts = Math.Clamp(_options.MaxAttempts, 1, 5);
+            for (var attempt = 1; ; attempt++)
             {
-                var url = BuildOffersUrl(categoryId, regionId, cityId, priceFrom, priceTo, offset, limit);
-
-                // GetRaw hands the response over, so it is released here once per page
-                using var rawResponse = await _httpClient.GetRaw(url);
-                var result = await rawResponse.Content.ReadAsStringAsync();
-                var data = JsonConvert.DeserializeObject<QueryData>(result);
-
-                var rawPageSize = data?.Data?.Count ?? 0;
-                if (rawPageSize > 0)
+                try
                 {
-                    results.AddRange(ExtractListOfParameters(data.Data));
+                    using var response = await _httpClient.GetRaw(url,
+                        timeoutInSeconds: Math.Clamp(_options.RequestTimeoutSeconds, 1, 120),
+                        headers: new Dictionary<string, string> { ["Accept"] = "application/json" });
+                    var body = await response.Content.ReadAsStringAsync();
+                    var json = JObject.Parse(body);
+                    if (json["data"] is not JArray)
+                        throw new JsonSerializationException("OLX response is missing its data array.");
+                    return json.ToObject<QueryData>() ?? throw new JsonSerializationException("OLX response was empty.");
                 }
-
-                // Break on the raw page size, not the post-filter count,
-                // so filtered-out (e.g. "TBS") listings cannot end pagination early
-                if (rawPageSize < limit - 2) break;
-
-                offset += limit;
-                if (offset >= maxOffset)
+                catch (Exception ex) when (attempt < attempts && IsTransient(ex))
                 {
-                    _logger.LogWarning(
-                        "OLX pagination hit offset cap {MaxOffset} for price bucket {PriceFrom}-{PriceTo}, stopping",
-                        maxOffset, priceFrom, priceTo);
-                    break;
+                    var delay = TimeSpan.FromMilliseconds(Math.Clamp(_options.RetryDelayMilliseconds, 0, 60_000) * Math.Pow(2, attempt - 1));
+                    if (ex is UpstreamHttpException upstream && upstream.RetryAfter > delay)
+                        delay = upstream.RetryAfter.Value;
+                    // Respect a long server-requested pause by ending this range instead of
+                    // retrying earlier than requested or holding the entire scrape indefinitely.
+                    if (delay > TimeSpan.FromMinutes(2)) throw;
+                    _logger.LogWarning(ex, "OLX request attempt {Attempt} failed; retrying after {Delay} seconds", attempt, delay.TotalSeconds);
+                    await Task.Delay(delay);
                 }
             }
-
-            return results; // all pages for range
         }
 
-        private  string BuildOffersUrl(
-            int categoryId,
-            int? regionId,
-            int? cityId,
-            int priceFrom,
-            int priceTo,
-            int offset,
-            int limit)
-        {
-            // OLX query uses URL-encoded keys for price filters: filter_float_price:from / :to, commonly seen percent-encoded [web:12]
-            // Keys are encoded as filter_float_price%3Afrom and filter_float_price%3Ato on the wire [web:12]
-            var qp = new List<string>
-        {
-            $"offset={offset}",
-            $"limit={limit}",
-            $"category_id={categoryId}",
-            $"filter_float_price%3Afrom={priceFrom}",
-            $"filter_float_price%3Ato={priceTo}"
-        }; // base params [web:12]
+        private static bool IsTransient(Exception error) => error is TaskCanceledException
+            || error is HttpRequestException http && (http.StatusCode is null or HttpStatusCode.RequestTimeout
+                or HttpStatusCode.TooManyRequests || (int)http.StatusCode.Value >= 500);
 
-            if (regionId.HasValue) qp.Add($"region_id={regionId.Value}"); // location filter [web:12]
-            if (cityId.HasValue) qp.Add($"city_id={cityId.Value}"); // location filter [web:12]
-
-            var query = string.Join("&", qp); // compose query string [web:12]
-            return $"{ConstantHelper.OLXAPI}?{query}"; // final URL
+        private static string BuildOffersUrl(int categoryId, int? regionId, int? cityId,
+            int priceFrom, int priceTo, int offset, int limit)
+        {
+            var query = new List<string> {
+                $"offset={offset}", $"limit={limit}", $"category_id={categoryId}",
+                $"filter_float_price%3Afrom={priceFrom}", $"filter_float_price%3Ato={priceTo}"
+            };
+            if (regionId.HasValue) query.Add($"region_id={regionId.Value}");
+            if (cityId.HasValue) query.Add($"city_id={cityId.Value}");
+            return $"{ConstantHelper.OLXAPI}?{string.Join("&", query)}";
         }
 
         public async Task<MarketplaceSearch> GetOLXResponse(CityEnum city = CityEnum.Krakow)
         {
-            MarketplaceSearch searchedData = new MarketplaceSearch();
-
-            // 0 is no OLX city: its id has not been looked up yet (CityExtensions). Queried
-            // anyway, OLX would at best reject it and at worst ignore it and return the whole
-            // region - every offer of which would be saved as this city's. So OLX sits it out.
             var cityId = city.ToEncodedOLXString();
             if (cityId == 0)
             {
-                _logger.LogWarning("No OLX city_id configured for {City}; skipping OLX for it", city);
-                return searchedData;
+                _logger.LogInformation("No OLX city_id configured for {City}; OLX is not supported for this city", city);
+                return new MarketplaceSearch();
             }
-
-            var results = await GetAllOffersAsync(
-                categoryId: ConstantHelper.RealEstateCategory, 
-                regionId: city.ToEncodedRegionOLXString(),
-                cityId: cityId,
-                priceFrom: 50_000,
-                priceTo: 10_000_000              
-            );
-            
-            searchedData.Data.AddRange(results);            
-
-            searchedData.Data = searchedData.Data
-                .DistinctBy(x => x.Id)
-                .OrderBy(x => x.PricePerMeter)
-                .ToList();
-
-            searchedData.TotalCount = searchedData.Data.Count;
-
-            return searchedData;
-
-        }          
+            var offers = await GetAllOffersAsync(ConstantHelper.RealEstateCategory,
+                city.ToEncodedRegionOLXString(), cityId, 50_000, 10_000_000);
+            var sorted = offers.OrderBy(offer => offer.PricePerMeter).ToList();
+            return new MarketplaceSearch { Data = sorted, TotalCount = sorted.Count };
+        }
 
         private List<SearchData> ExtractListOfParameters(List<Data> responses)
         {
             List<SearchData> result = new List<SearchData>();
             foreach (var response in responses)
             {
-                if (response.Title?.Contains("TBS") == true)
+                if (response == null || string.IsNullOrWhiteSpace(response.Id) || string.IsNullOrWhiteSpace(response.Url)) continue;
+                if (response.Title?.Contains("TBS", StringComparison.OrdinalIgnoreCase) == true)
                     continue;
                 var extractedObject = ExtractParameter(response);
                 result.Add(extractedObject);
@@ -215,16 +198,17 @@ namespace AF_mobile_web_api.Services
             return record;
         }
 
-        private SearchData MapParamsToSearchData(List<Param> parameters)
+        private SearchData MapParamsToSearchData(List<Param>? parameters)
         {
             var data = new SearchData();
-            foreach (var param in parameters)
+            foreach (var param in parameters ?? new List<Param>())
             {
+                if (param == null) continue;
                 switch (param.Key)
                 {
                     case ConstantHelper.Price:
                         if (param.Value?.Label != null)
-                            data.Price = ParseNumberToDouble(param.Value?.Label);
+                            data.Price = ParseNumberToDouble(param.Value.Label);
                         break;
                     case ConstantHelper.PricePerMeter:
                         data.PricePerMeter = ParseNumberToDouble(param?.Value?.Key ?? string.Empty);
@@ -237,7 +221,7 @@ namespace AF_mobile_web_api.Services
                         data.Market = param.Value?.Label ?? string.Empty;
                         break;
                     case ConstantHelper.BuildType:
-                        data.BuildingType = param.Value?.Label;
+                        data.BuildingType = param.Value?.Label ?? string.Empty;
                         break;
                     case ConstantHelper.Area:
                         data.Area = ParseNumberToDouble(param?.Value?.Key ?? string.Empty);
@@ -259,13 +243,13 @@ namespace AF_mobile_web_api.Services
                 return 0;
 
             var cleaned = priceString.Replace("zł", "", StringComparison.OrdinalIgnoreCase)
-                                     .Replace(" ", "")
+                                     .Replace(" ", "").Replace("\u00a0", "").Replace("\u202f", "")
                                      .Replace(",", ".", StringComparison.OrdinalIgnoreCase)
                                      .Trim();
 
             if (double.TryParse(cleaned, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double result))
             {
-                return result;
+                return double.IsFinite(result) ? result : 0;
             }
 
             return 0;

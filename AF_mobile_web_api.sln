@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AF_mobile_web_api", "AF_mob
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApplicationDatabase", "ApplicationDatabase\ApplicationDatabase.csproj", "{AD3A3535-C70A-4B35-9F7D-0340AFE742F4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AF_mobile_web_api.Tests", "AF_mobile_web_api.Tests\AF_mobile_web_api.Tests.csproj", "{ABB1F4ED-65E5-45C9-8286-E6E44D007D05}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{AD3A3535-C70A-4B35-9F7D-0340AFE742F4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AD3A3535-C70A-4B35-9F7D-0340AFE742F4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AD3A3535-C70A-4B35-9F7D-0340AFE742F4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ABB1F4ED-65E5-45C9-8286-E6E44D007D05}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ABB1F4ED-65E5-45C9-8286-E6E44D007D05}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ABB1F4ED-65E5-45C9-8286-E6E44D007D05}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ABB1F4ED-65E5-45C9-8286-E6E44D007D05}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

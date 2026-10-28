@@ -4,6 +4,7 @@ namespace AF_mobile_web_api.Services.Interfaces
     {
         /// <summary>True while a scrape job is executing in the background.</summary>
         bool IsRunning { get; }
+        ScrapeJobStatus Status { get; }
 
         /// <summary>
         /// Starts the job in the background unless one is already running.

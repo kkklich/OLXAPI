@@ -106,10 +106,14 @@ namespace AF_mobile_web_api.Controllers
                 _logger.LogWarning(ex, "Failed to get latest scrape time");
             }
 
+            var status = _scrapeRunner.Status;
             return Ok(new
             {
-                isRunning = _scrapeRunner.IsRunning,
-                lastScrapedAt = lastScrapedAt
+                isRunning = status.IsRunning,
+                lastScrapedAt,
+                lastRunSucceeded = status.LastRunSucceeded,
+                lastCompletedAt = status.LastCompletedAt,
+                lastError = status.LastError
             });
         }
         
