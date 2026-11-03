@@ -3,11 +3,8 @@ using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.DTO.Enums;
 using AF_mobile_web_api.Repositories.Interfaces;
 using AF_mobile_web_api.Services.Interfaces;
-using ApplicationDatabase;
 using ApplicationDatabase.Models;
 using AutoMapper;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace AF_mobile_web_api.Services
 {
@@ -18,7 +15,8 @@ namespace AF_mobile_web_api.Services
         private readonly INieruchomosciOnlineService _nieruchomosciOnlineService;
         private readonly IMapper _mapper;
         private readonly IPropertyDataRepository _propertyDataRepository;
-        private readonly IMemoryCache _cache;
+        private readonly ReadCache _cache;
+        private bool _multiCityScrape;
         private readonly IOfferSnapshotCache _offers;
         private readonly ILogger<RealEstateServices> _logger;
 
@@ -28,7 +26,7 @@ namespace AF_mobile_web_api.Services
             INieruchomosciOnlineService nieruchomosciOnlineService,
             IMapper mapper,
             IPropertyDataRepository propertyDataRepository,
-            IMemoryCache cache,
+            ReadCache cache,
             IOfferSnapshotCache offers,
             ILogger<RealEstateServices> logger)
         {
@@ -64,30 +62,36 @@ namespace AF_mobile_web_api.Services
         {
             var cacheKey = $"RealEstateData_{city}";
 
-            if (_cache.TryGetValue(cacheKey, out List<SearchData>? cached) && cached is not null)
+            return await _cache.GetAsync(cacheKey, StatisticServices.CacheDuration, async () =>
             {
-                return cached;
-            }
-
-            var latestBatch = await _propertyDataRepository.GetLatestByCityAsync(city.ToString());
-            var data = _mapper.Map<List<SearchData>>(latestBatch);
-
-            _cache.Set(cacheKey, data, new MemoryCacheEntryOptions
-            {
-                AbsoluteExpirationRelativeToNow = StatisticServices.CacheDuration
+                var latestBatch = await _propertyDataRepository.GetLatestByCityAsync(city.ToString());
+                return _mapper.Map<List<SearchData>>(latestBatch);
             });
-
-            return data;
         }
 
        
         public async Task<MarketplaceSearch> GetdataForManyCitiesAsync()
         {
-            foreach (CityEnum city in Enum.GetValues(typeof(CityEnum)))
+            var failures = new List<Exception>();
+            _multiCityScrape = true;
+            try
             {
-                await LoadDataMarkeplacesAsync(city);
+                foreach (CityEnum city in Enum.GetValues(typeof(CityEnum)))
+                {
+                    try { await LoadDataMarkeplacesAsync(city); }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Scrape incomplete for {City}; continuing with other cities", city);
+                        failures.Add(ex);
+                    }
+                }
             }
-
+            finally
+            {
+                _multiCityScrape = false;
+                _offers.Invalidate();
+            }
+            if (failures.Count > 0) throw new AggregateException("Some cities could not be fully downloaded.", failures);
             return new MarketplaceSearch();
         }
 
@@ -99,23 +103,26 @@ namespace AF_mobile_web_api.Services
             var morizonTask = _morizonApiService.GetPropertyListingDataAsync(city);
             var olxTask = _olxApiService.GetOLXResponse(city);
 
-            var olxData = await GetSourceDataSafeAsync(olxTask, "OLX", city);
+            var olxData = await GetSourceDataSafeAsync(olxTask, "OLX", city, city.ToEncodedOLXString() != 0);
             var morizonData = await GetSourceDataSafeAsync(morizonTask, "Morizon", city);
             var nieruchomosciData = await GetSourceDataSafeAsync(nieruchomosciTask, "NieruchomosciOnline", city);
 
             var combinedData = new MarketplaceSearch
             {
-                Data = olxData
-                    .Union(morizonData)
-                    .Union(nieruchomosciData)
+                Data = olxData.Data
+                    .Union(morizonData.Data)
+                    .Union(nieruchomosciData.Data)
                     .ToList()
             };
+            var failures = new[] { olxData.Error, morizonData.Error, nieruchomosciData.Error }
+                .OfType<Exception>().ToList();
 
             if (combinedData.Data.Count == 0)
             {
                 // Saving an empty batch would become the "latest" snapshot downstream
                 // (GetLatestByCityAsync) and wipe the dashboard until the next scrape.
                 _logger.LogError("All marketplace sources returned no data for {City}; skipping save", city);
+                if (failures.Count > 0) throw new AggregateException(failures);
                 return combinedData;
             }
 
@@ -156,27 +163,35 @@ namespace AF_mobile_web_api.Services
                 _cache.Remove($"RealEstateData_{name}");
                 _cache.Remove($"FullDashboard_{name}");
                 _cache.Remove($"PriceDrops_{name}");
+                _cache.Remove(MapPointsPayloadProvider.CacheKey(name));
+                _cache.Remove(MapPointsPayloadProvider.CacheKey(name, compact: true));
             }
-            _cache.Remove(MapPointsPayloadProvider.CacheKey(city));
+
 
             // The offers list is served from a deduplicated snapshot of every city at once,
             // so it is rebuilt as a whole - the rows just saved are new newest-snapshots.
-            _offers.Invalidate();
+            if (!_multiCityScrape) _offers.Invalidate();
 
+            if (failures.Count > 0) throw new AggregateException(failures);
             return combinedData;
         }
 
-        private async Task<List<SearchData>> GetSourceDataSafeAsync(Task<MarketplaceSearch> sourceTask, string sourceName, CityEnum city)
+        private async Task<(List<SearchData> Data, Exception? Error)> GetSourceDataSafeAsync(
+            Task<MarketplaceSearch> sourceTask, string sourceName, CityEnum city, bool required = true)
         {
             try
             {
                 var result = await sourceTask;
-                return result?.Data ?? new List<SearchData>();
+                var data = result?.Data ?? new List<SearchData>();
+                if (required && data.Count == 0)
+                    throw new InvalidOperationException("Source returned no offers.");
+                return (data, null);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Marketplace source {Source} failed for {City}; continuing with the remaining sources", sourceName, city);
-                return new List<SearchData>();
+                var retained = ex is PartialScrapeException partial ? partial.Offers.ToList() : new List<SearchData>();
+                return (retained, new ScrapeSourceException(sourceName, city, ex));
             }
         }
 

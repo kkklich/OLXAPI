@@ -4,13 +4,14 @@ namespace AF_mobile_web_api.Services
 {
     // A full scrape takes minutes - far longer than reverse-proxy request timeouts -
     // so the controller returns 202 and the job runs here, detached from the request.
-    // Singleton: the _running flag also serializes scrapes across requests, because two
+    // Singleton: the status lock also serializes scrapes across requests, because two
     // concurrent scrapes would write two overlapping "latest" batches to the database.
     public class ScrapeJobRunner : IScrapeJobRunner
     {
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<ScrapeJobRunner> _logger;
-        private int _running; // 0 = idle, 1 = busy (Interlocked)
+        private readonly object _gate = new();
+        private ScrapeJobStatus _status = new();
 
         public ScrapeJobRunner(IServiceScopeFactory scopeFactory, ILogger<ScrapeJobRunner> logger)
         {
@@ -18,7 +19,8 @@ namespace AF_mobile_web_api.Services
             _logger = logger;
         }
 
-        public bool IsRunning => Volatile.Read(ref _running) == 1;
+        public ScrapeJobStatus Status { get { lock (_gate) return _status; } }
+        public bool IsRunning => Status.IsRunning;
 
         public bool TryStart(string jobName, Func<IRealEstateServices, Task> job) =>
             TryStart(jobName, (IServiceProvider services) => job(services.GetRequiredService<IRealEstateServices>()));
@@ -28,13 +30,15 @@ namespace AF_mobile_web_api.Services
         // portals.
         public bool TryStart(string jobName, Func<IServiceProvider, Task> job)
         {
-            if (Interlocked.CompareExchange(ref _running, 1, 0) != 0)
+            lock (_gate)
             {
-                return false;
+                if (_status.IsRunning) return false;
+                _status = new ScrapeJobStatus(IsRunning: true);
             }
 
             _ = Task.Run(async () =>
             {
+                string? failure = null;
                 try
                 {
                     // The request's scoped services (DbContext included) are disposed when
@@ -48,10 +52,14 @@ namespace AF_mobile_web_api.Services
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Scrape job {Job} failed", jobName);
+                    var errors = ex is AggregateException aggregate
+                        ? aggregate.Flatten().InnerExceptions.AsEnumerable() : new[] { ex };
+                    var sources = errors.OfType<ScrapeSourceException>().Select(error => error.Message).Distinct().ToList();
+                    failure = sources.Count > 0 ? string.Join(" ", sources) : "Scrape failed; check server logs.";
                 }
                 finally
                 {
-                    Volatile.Write(ref _running, 0);
+                    lock (_gate) _status = new ScrapeJobStatus(false, failure == null, DateTimeOffset.UtcNow, failure);
                 }
             });
 

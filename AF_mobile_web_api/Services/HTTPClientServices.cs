@@ -100,7 +100,10 @@ namespace AF_mobile_web_api.Services
             {
                 var content = await resp.Content.ReadAsStringAsync();
                 var errorMessage = $"Error while calling : {url}, response StatusCode = {resp.StatusCode}. Content: {content}";
-                throw new HttpRequestException(errorMessage);
+                var retryAfter = resp.Headers.RetryAfter?.Delta;
+                if (retryAfter == null && resp.Headers.RetryAfter?.Date is { } retryAt)
+                    retryAfter = retryAt - DateTimeOffset.UtcNow;
+                throw new UpstreamHttpException(errorMessage, resp.StatusCode, retryAfter);
             }
         }
     }

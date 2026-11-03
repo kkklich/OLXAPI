@@ -4,7 +4,6 @@ using AF_mobile_web_api.DTO.Enums;
 using AF_mobile_web_api.Repositories.Interfaces;
 using AF_mobile_web_api.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using System.Reflection;
 
 namespace AF_mobile_web_api.Services
@@ -13,7 +12,7 @@ namespace AF_mobile_web_api.Services
     {
         private readonly IPropertyDataRepository _propertyDataRepository;
         private readonly IRealEstateServices _realEstate;
-        private readonly IMemoryCache _cache;
+        private readonly ReadCache _cache;
 
         // Also the TTL of the per-city latest-batch entry (RealEstateData_{city}) that
         // RealEstateServices keeps and every dashboard entry here is built from - one knob.
@@ -26,7 +25,7 @@ namespace AF_mobile_web_api.Services
         // (swapped price/area, placeholder values), not a real offer
         private const double MaxBelowMedianPercent = 50;
 
-        public StatisticServices(IRealEstateServices realEstate, IMemoryCache cache, IPropertyDataRepository propertyDataRepository)
+        public StatisticServices(IRealEstateServices realEstate, ReadCache cache, IPropertyDataRepository propertyDataRepository)
         {
             _realEstate = realEstate;
             _cache = cache;
@@ -54,36 +53,41 @@ namespace AF_mobile_web_api.Services
         {
             var cacheKey = $"RealEstateData_{area.Name}";
 
-            if (_cache.TryGetValue(cacheKey, out List<SearchData> cached))
+            // A single city's entry is owned by RealEstateServices; do not acquire
+            // the same cache lock recursively when the dashboard asks for that city.
+            if (!area.IsMultiCity) return (await _realEstate.GetDataAsync(area.Name)).Data;
+            return await _cache.GetAsync(cacheKey, CacheDuration, async () =>
             {
-                return cached;
-            }
-
-            // Sequential, one city at a time: the calls share the same scoped DbContext.
-            // Per city rather than one query over all of them, so each city contributes its
-            // own newest scrape even if they were not all scraped on the same day.
-            var results = new List<SearchData>();
-            foreach (var city in area.CityNames)
-            {
-                results.AddRange((await _realEstate.GetDataAsync(city)).Data);
-            }
-
-            if (area.IsMultiCity)
-            {
-                foreach (var offer in results.Where(x => x.Location != null))
+                // Sequential, one city at a time: the calls share the same scoped DbContext.
+                // Per city rather than one query over all of them, so each city contributes its
+                // own newest scrape even if they were not all scraped on the same day.
+                var results = new List<SearchData>();
+                foreach (var city in area.CityNames)
                 {
-                    offer.Location.District = QualifiedDistrict(offer.Location.City, offer.Location.District);
+                    results.AddRange((await _realEstate.GetDataAsync(city)).Data.Select(offer => new SearchData
+                    {
+                        Id = offer.Id, Url = offer.Url, Title = offer.Title, Price = offer.Price,
+                        PricePerMeter = offer.PricePerMeter, Floor = offer.Floor, Market = offer.Market,
+                        BuildingType = offer.BuildingType, Area = offer.Area, Private = offer.Private,
+                        WebName = offer.WebName,
+                        Location = offer.Location == null ? null! : new LocationPlace
+                        {
+                            City = offer.Location.City, District = offer.Location.District,
+                            Lat = offer.Location.Lat, Lon = offer.Location.Lon
+                        }
+                    }));
                 }
-            }
 
-            var options = new MemoryCacheEntryOptions
-            {
-                AbsoluteExpirationRelativeToNow = CacheDuration
-            };
+                if (area.IsMultiCity)
+                {
+                    foreach (var offer in results.Where(x => x.Location != null))
+                    {
+                        offer.Location.District = QualifiedDistrict(offer.Location.City, offer.Location.District);
+                    }
+                }
 
-            _cache.Set(cacheKey, results, options);
-
-            return results;
+                return results;
+            });
         }
 
         // includeMapPoints = false returns the same dashboard without its map points. They
@@ -96,52 +100,46 @@ namespace AF_mobile_web_api.Services
             var area = CityArea.Parse(cityName);
 
             var cacheKey = $"FullDashboard_{area.Name}";
-            if (_cache.TryGetValue(cacheKey, out FullDashboardDTO cached))
+            var dashboard = await _cache.GetAsync(cacheKey, CacheDuration, async () =>
             {
-                return Shape(cached, includeMapPoints);
-            }
+                // Sequential, not concurrent: both calls share the same scoped DbContext,
+                // and EF Core throws if two operations run on it at the same time.
+                var timeline = await _propertyDataRepository.GetTimelineByCitiesAsync(area.CityNames);
+                var results = await GetCachedRealEstateDataAsync(area);
 
-            // Sequential, not concurrent: both calls share the same scoped DbContext,
-            // and EF Core throws if two operations run on it at the same time.
-            var timeline = await _propertyDataRepository.GetTimelineByCitiesAsync(area.CityNames);
-            var results = await GetCachedRealEstateDataAsync(area);
+                // Everything below that sorts or groups the offers is computed once here and handed
+                // to both the charts and the insights, which publish the same figures.
+                var validOffers = GetValidOffers(results);
+                var validWithDistrict = validOffers
+                    .Where(x => !string.IsNullOrWhiteSpace(x.Location?.District))
+                    .ToList();
 
-            // Everything below that sorts or groups the offers is computed once here and handed
-            // to both the charts and the insights, which publish the same figures.
-            var validOffers = GetValidOffers(results);
-            var validWithDistrict = validOffers
-                .Where(x => !string.IsNullOrWhiteSpace(x.Location?.District))
-                .ToList();
+                // Valid offers by district, dropping districts with too few offers to trust the median.
+                var districtGroups = validWithDistrict
+                    .GroupBy(x => x.Location.District)
+                    .Where(g => g.Count() >= MinOffersPerDistrict)
+                    .ToList();
 
-            // Valid offers by district, dropping districts with too few offers to trust the median.
-            var districtGroups = validWithDistrict
-                .GroupBy(x => x.Location.District)
-                .Where(g => g.Count() >= MinOffersPerDistrict)
-                .ToList();
+                var districtMedians = districtGroups.ToDictionary(
+                    g => g.Key,
+                    g => CalculateMedian(g.Select(x => x.PricePerMeter)));
 
-            var districtMedians = districtGroups.ToDictionary(
-                g => g.Key,
-                g => CalculateMedian(g.Select(x => x.PricePerMeter)));
+                var medians = OfferMedians.Of(validOffers);
 
-            var medians = OfferMedians.Of(validOffers);
+                var charts = BuildDashboardCharts(results, validOffers, timeline, medians, districtGroups, districtMedians);
+                var insights = BuildMarketInsights(results, validOffers, validWithDistrict, districtGroups, districtMedians, medians);
+                var mapPoints = BuildMapPoints(results);
 
-            var charts = BuildDashboardCharts(results, validOffers, timeline, medians, districtGroups, districtMedians);
-            var insights = BuildMarketInsights(results, validOffers, validWithDistrict, districtGroups, districtMedians, medians);
-            var mapPoints = BuildMapPoints(results);
+                var dto = new FullDashboardDTO
+                {
+                    Charts = charts,
+                    Insights = insights,
+                    MapPoints = mapPoints
+                };
 
-            var dto = new FullDashboardDTO
-            {
-                Charts = charts,
-                Insights = insights,
-                MapPoints = mapPoints
-            };
-
-            _cache.Set(cacheKey, dto, new MemoryCacheEntryOptions
-            {
-                AbsoluteExpirationRelativeToNow = CacheDuration
+                return dto;
             });
-
-            return Shape(dto, includeMapPoints);
+            return Shape(dashboard, includeMapPoints);
         }
 
         // A view of the cached dashboard, not a copy of it: dropping the map points must
@@ -456,10 +454,10 @@ namespace AF_mobile_web_api.Services
             limit = Math.Clamp(limit, 1, MaxPriceDrops);
 
             var cacheKey = $"PriceDrops_{area.Name}";
-            if (!_cache.TryGetValue(cacheKey, out List<PriceDropDTO> drops))
+            var drops = await _cache.GetAsync(cacheKey, CacheDuration, async () =>
             {
                 // Each city diffs its own two latest scrapes; an area ranks the drops of all of them.
-                drops = new List<PriceDropDTO>();
+                var drops = new List<PriceDropDTO>();
                 foreach (var city in area.CityNames)
                 {
                     drops.AddRange(await _propertyDataRepository.GetPriceDropsAsync(city, MaxPriceDrops));
@@ -481,11 +479,8 @@ namespace AF_mobile_web_api.Services
                         .ToList();
                 }
 
-                _cache.Set(cacheKey, drops, new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = CacheDuration
-                });
-            }
+                return drops;
+            });
 
             return drops.Take(limit).ToList();
         }

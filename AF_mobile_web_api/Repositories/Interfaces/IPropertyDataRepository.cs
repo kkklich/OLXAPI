@@ -1,4 +1,4 @@
-﻿using AF_mobile_web_api.Domain;
+using AF_mobile_web_api.Domain;
 using AF_mobile_web_api.DTO;
 using ApplicationDatabase.Models;
 
@@ -14,5 +14,6 @@ namespace AF_mobile_web_api.Repositories.Interfaces
         Task<List<PropertyData>> GetHistoryCandidatesAsync(string city, HistoryCandidateFilter filter);
         Task<PropertyData?> GetLatestByUrlAsync(string city, string url);
         Task<List<PriceDropDTO>> GetPriceDropsAsync(string city, int limit);
+        Task<DateTime?> GetLatestScrapeTimeAsync();
     }
 }

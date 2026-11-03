@@ -7,12 +7,13 @@ namespace AF_mobile_web_api.Services
     // One offer as the paged list filters and sorts it: the newest snapshot's own columns
     // plus the history aggregates over every snapshot sharing its Url.
     //
-    // Url and Title are deliberately NOT held here. They are the two widest columns and are
-    // needed only for the ten rows actually rendered, which the repository fetches by Id -
-    // keeping them out halves the memory the snapshot costs for ~95k offers.
+    // The URL and original title come from the same streamed load, so rendering a page
+    // needs no additional database read. Comparison keys are retained for filters/sorts.
     public sealed class OfferSnapshot
     {
         public Guid Id { get; init; }
+        public string Url { get; init; } = string.Empty;
+        public string Title { get; init; } = string.Empty;
         public double Price { get; init; }
         public double PricePerMeter { get; init; }
         public int Floor { get; init; }
@@ -115,6 +116,8 @@ namespace AF_mobile_web_api.Services
         public OfferSnapshot Build(LatestOfferRow row) => new()
         {
             Id = row.Id,
+            Url = row.Url ?? string.Empty,
+            Title = row.Title ?? string.Empty,
             Price = row.Price,
             PricePerMeter = row.PricePerMeter,
             Floor = row.Floor,

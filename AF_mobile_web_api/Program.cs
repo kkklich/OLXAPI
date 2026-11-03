@@ -42,6 +42,7 @@ builder.Services.AddScoped<IPropertyDataRepository, PropertyDataRepository>();
 
 builder.Services.AddScoped<IPropertyComparer, PropertyComparer>();
 
+builder.Services.Configure<OlxScrapeOptions>(builder.Configuration.GetSection("OlxScrape"));
 builder.Services.AddScoped<IOLXAPIService, OLXAPIService>();
 builder.Services.AddScoped<INieruchomosciOnlineService, NieruchomosciOnlineService>();
 builder.Services.AddScoped<IMorizonApiService, MorizonApiService>();
@@ -61,7 +62,8 @@ builder.Services.AddSingleton<IOfferSnapshotCache, OfferSnapshotCache>();
 // (on Render, that is every visitor after an idle period) does not pay for them.
 builder.Services.AddHostedService<CacheWarmupService>();
 
-builder.Services.AddMemoryCache();//TODO add redis cache for better performance and scalability
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<ReadCache>();
 
 builder.Services.AddResponseCompression(options =>
 {

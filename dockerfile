@@ -8,7 +8,7 @@ COPY AF_mobile_web_api/AF_mobile_web_api.csproj AF_mobile_web_api/
 COPY ApplicationDatabase/ApplicationDatabase.csproj ApplicationDatabase/
 
 # Restore dependencies
-RUN dotnet restore
+RUN dotnet restore AF_mobile_web_api/AF_mobile_web_api.csproj
 
 # Copy the rest of the source code
 COPY . .

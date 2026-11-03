@@ -1,3 +1,4 @@
+using AF_mobile_web_api.Repositories.Interfaces;
 using System.IO.Compression;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Primitives;
@@ -93,9 +94,27 @@ namespace AF_mobile_web_api.Controllers
         }
 
         [HttpGet("scrapeStatus")]
-        public IActionResult GetScrapeStatus()
+        public async Task<IActionResult> GetScrapeStatus([FromServices] IPropertyDataRepository propertyRepo)
         {
-            return Ok(new { isRunning = _scrapeRunner.IsRunning });
+            DateTime? lastScrapedAt = null;
+            try
+            {
+                lastScrapedAt = await propertyRepo.GetLatestScrapeTimeAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to get latest scrape time");
+            }
+
+            var status = _scrapeRunner.Status;
+            return Ok(new
+            {
+                isRunning = status.IsRunning,
+                lastScrapedAt,
+                lastRunSucceeded = status.LastRunSucceeded,
+                lastCompletedAt = status.LastCompletedAt,
+                lastError = status.LastError
+            });
         }
         
         // Legacy public endpoints, kept for existing callers (DEPLOYMENT.md smoke-tests
@@ -163,9 +182,9 @@ namespace AF_mobile_web_api.Controllers
         // entity tag lets the browser keep a copy and revalidate it: a map reopened after a
         // reload costs a 304 until a scrape changes the points.
         [HttpGet("getMapPoints/{city}")]
-        public async Task<IActionResult> GetMapPoints(string city)
+        public async Task<IActionResult> GetMapPoints(string city, [FromQuery] bool compact = false)
         {
-            var payload = await _mapPoints.GetAsync(city);
+            var payload = await _mapPoints.GetAsync(city, compact);
 
             var headers = Response.GetTypedHeaders();
             headers.ETag = payload.ETag;

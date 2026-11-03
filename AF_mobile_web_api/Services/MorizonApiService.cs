@@ -1,4 +1,4 @@
-﻿using AF_mobile_web_api.Domain;
+using AF_mobile_web_api.Domain;
 using AF_mobile_web_api.DTO.Enums;
 using AF_mobile_web_api.Helper;
 using AF_mobile_web_api.Services.Interfaces;
@@ -18,148 +18,156 @@ namespace AF_mobile_web_api.Services
             _logger = logger;
         }
 
+        private sealed record SearchPage(MarketplaceSearch Search, int RawCount);
+
         public async Task<MarketplaceSearch> GetPropertyListingDataAsync(CityEnum city = CityEnum.Krakow, string? searchUrl = null)
         {
-            var cityName = city.ToString().ToLower();
-            var allResults = new MarketplaceSearch { Data = new List<SearchData>() };
+            var failures = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+            var requestCount = 0;
+            using var slots = new SemaphoreSlim(3);
 
-            // 5,000 PLN price bands covering 100,000 to 10,000,000 PLN
-            int minPrice = 100000;
-            int maxPrice = 10000000;
-            int priceStep = 5000;
+            async Task<SearchPage> Fetch(string url)
+            {
+                await slots.WaitAsync();
+                try
+                {
+                    Interlocked.Increment(ref requestCount);
+                    return await FetchPageAsync(url);
+                }
+                finally { slots.Release(); }
+            }
 
-            var contexts = new List<FetchContext>();
+            async Task<List<SearchData>> Band(BuildingType building, MarketKind market, int from, int to)
+            {
+                var offers = new List<SearchData>();
+                var url = $"/mieszkania/{building.ToString().ToLowerInvariant()}/{city.ToString().ToLowerInvariant()}/?ps%5Bprice_from%5D={from}&ps%5Bprice_to%5D={to}&ps%5Bmarket_type%5D={(int)market}";
+                try
+                {
+                    var first = await Fetch(url);
+                    void Add(SearchPage page)
+                    {
+                        foreach (var offer in page.Search.Data)
+                        {
+                            offer.Market = market.ToString();
+                            offer.BuildingType = building.ToString();
+                            offers.Add(offer);
+                        }
+                    }
+                    Add(first);
+                    var seen = first.Search.Data.Select(offer => offer.Id).ToHashSet(StringComparer.Ordinal);
+                    if (first.RawCount == 0)
+                    {
+                        if (first.Search.TotalCount > 0)
+                            throw new InvalidOperationException("Morizon returned an empty page for a non-empty search.");
+                        return offers;
+                    }
+                    // Probe once. Split only a search that cannot fit within five pages.
+                    // Overlap the split price so fractional prices cannot fall into a gap.
+                    if (first.Search.TotalCount > first.RawCount * 5 && to - from > 5000)
+                    {
+                        var middle = from + (to - from) / 2;
+                        offers.AddRange(await Band(building, market, from, middle));
+                        offers.AddRange(await Band(building, market, middle, to));
+                        return offers;
+                    }
+                    for (var page = 2; page <= 5 && seen.Count < first.Search.TotalCount; page++)
+                    {
+                        var next = await Fetch($"{url}&page={page}");
+                        if (next.RawCount == 0)
+                            throw new InvalidOperationException("Morizon pagination ended before its reported total.");
+                        Add(next);
+                        if (next.Search.Data.Count(offer => seen.Add(offer.Id)) == 0)
+                            throw new InvalidOperationException("Morizon repeated a page before its reported total.");
+                    }
+                    if (seen.Count < first.Search.TotalCount && to - from > 5000)
+                    {
+                        var middle = from + (to - from) / 2;
+                        offers.AddRange(await Band(building, market, from, middle));
+                        offers.AddRange(await Band(building, market, middle, to));
+                    }
+                    else if (seen.Count < first.Search.TotalCount)
+                        throw new InvalidOperationException("Morizon search exceeds the pagination limit even in a narrow price band.");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Morizon price band {From}-{To} failed; retaining {Count} offers", from, to, offers.Count);
+                    failures.Add(ex);
+                }
+                return offers;
+            }
 
+            List<SearchData> all;
             if (!string.IsNullOrWhiteSpace(searchUrl))
             {
-                contexts.Add(new FetchContext { Url = searchUrl});
+                // A supplied URL is an exact search, not a template for arbitrary price bands.
+                var first = await Fetch(searchUrl);
+                all = first.Search.Data;
+                var seen = all.Select(offer => offer.Id).ToHashSet(StringComparer.Ordinal);
+                try
+                {
+                    for (var page = 2; page <= 5 && seen.Count < first.Search.TotalCount; page++)
+                    {
+                        var next = await Fetch($"{searchUrl}{(searchUrl.Contains('?') ? "&" : "?")}page={page}");
+                        all.AddRange(next.Search.Data);
+                        if (next.RawCount == 0 || next.Search.Data.Count(offer => seen.Add(offer.Id)) == 0)
+                            throw new InvalidOperationException("Morizon custom search pagination ended before its reported total.");
+                    }
+                }
+                catch (Exception ex) { failures.Add(ex); }
+                if (seen.Count < first.Search.TotalCount)
+                    failures.Add(new InvalidOperationException("Morizon custom search exceeds five pages."));
             }
             else
             {
-                foreach (var buildingType in Enum.GetValues<BuildingType>())
-                {
-                    foreach (var kind in Enum.GetValues<MarketKind>())
-                    {
-                        for (int priceFrom = minPrice; priceFrom < maxPrice; priceFrom += priceStep)
-                        {
-                            int priceTo = Math.Min(priceFrom + priceStep, maxPrice);
-                            var building = buildingType.ToString().ToLower() ?? "";
-                            var kindNumber = (int)kind;
-                            var url = $"/mieszkania/{building}/{cityName}/?ps%5Bprice_from%5D={priceFrom}&ps%5Bprice_to%5D={priceTo}&ps%5Bmarket_type%5D={kindNumber}";
-                            contexts.Add(new FetchContext
-                            {
-                                Url = url,
-                                Market = kind,
-                                Building = buildingType,
-                                PriceFrom = priceFrom,
-                                PriceTo = priceTo
-                            });
-                        }
-                    }
-                }
+                var tasks = from building in Enum.GetValues<BuildingType>()
+                            from market in Enum.GetValues<MarketKind>()
+                            select Band(building, market, 100_000, 10_000_000);
+                all = (await Task.WhenAll(tasks)).SelectMany(items => items).ToList();
             }
-
-            // Add pagination per context (pages 2-5)
-            var expandedUrls = new List<FetchContext>();
-            foreach (var ctx in contexts)
-            {
-                expandedUrls.Add(ctx);
-                for (int page = 2; page <= 5; page++)
-                {
-                    expandedUrls.Add(new FetchContext
-                    {
-                        Url = $"{ctx.Url}&page={page}",
-                        Market = ctx.Market,
-                        Building = ctx.Building,
-                        PriceFrom = ctx.PriceFrom,
-                        PriceTo = ctx.PriceTo,
-                        Page = page
-                    });
-                }
-            }
-
-            // Process URLs in batches to avoid overwhelming the API
-            var batchSize = 10; // Adjust based on rate limits
-            var batches = expandedUrls
-                .Select((url, index) => new { url, index })
-                .GroupBy(x => x.index / batchSize)
-                .Select(g => g.Select(x => x.url).ToList())
-                .ToList();
-
-            foreach (var batch in batches)
-            {
-                var batchTasks = batch.Select(c => FetchSingleSearchAsync(c.Url)).ToArray();
-                var batchResults = await Task.WhenAll(batchTasks);
-
-                // batchResults is index-aligned with batch, so each result
-                // is stamped with its own context, not the first one's
-                for (int i = 0; i < batchResults.Length; i++)
-                {
-                    var result = batchResults[i];
-                    if (result == null)
-                        continue;
-
-                    var context = batch[i];
-                    result.Data.ForEach(p =>
-                    {
-                        p.Market = context.Market.ToString();
-                        p.BuildingType = context.Building.ToString();
-                    });
-                    allResults.Data.AddRange(result.Data);
-                    allResults.TotalCount += result.TotalCount;
-                }
-
-                // Add delay between batches to respect rate limits
-                await Task.Delay(100); // 100 ms delay between batches
-            }
-
-            // Remove duplicates based on property ID
-            var uniqueProperties = allResults.Data
-                .GroupBy(p => p.Id)
-                .Select(g => g.First())
-                .ToList();
-
-            // Some developer offers are listed without a price ("Zapytaj o cenę" on the site):
-            // the API sends price and priceM2 as null, yet the offer still matches the price band
-            // it was searched in. With nothing to read, such a row would be saved as Price 0 and
-            // add only a price-less snapshot to the offer's history, so it is skipped. Until the
-            // null guards in TransformPropertyToSearchData these nodes threw and were dropped by
-            // its catch, so the older scrapes hold none of them either.
-            var unpriced = uniqueProperties.RemoveAll(p => p.Price <= 0);
-            if (unpriced > 0)
-            {
-                _logger.LogInformation("Morizon listed {Count} offers in {City} without a price; skipped them", unpriced, city);
-            }
-
-            return new MarketplaceSearch
-            {
-                Data = uniqueProperties,
-                TotalCount = uniqueProperties.Count
-            };
+            var unique = all.DistinctBy(offer => offer.Id).ToList();
+            var unpriced = unique.RemoveAll(offer => offer.Price <= 0);
+            _logger.LogInformation("Morizon {City}: {Requests} searches, {Count} priced offers, {Unpriced} unpriced skipped", city, requestCount, unique.Count, unpriced);
+            if (!failures.IsEmpty)
+                throw new PartialScrapeException("Morizon download incomplete; retained successfully downloaded offers.", unique, failures.First());
+            return new MarketplaceSearch { Data = unique, TotalCount = unique.Count };
         }
 
         public async Task<MarketplaceSearch?> FetchSingleSearchAsync(string? searchUrl = null)
         {
-            searchUrl ??= "/mieszkania/najtansze/krakow/?ps%5Bprice_from%5D=100000&ps%5Bprice_to%5D=750000";
-            try
-            {              
-                var requestBody = new
-                {
-                    query = ConstantHelper.GraphqlQuery ,
-                    variables = new { url = searchUrl }
-                };
-
-                // Use your HTTPClientServices to make the POST request
-                var response = await _httpClient.PostAsync<object, JObject>(ConstantHelper.MorizonAPI, requestBody, false, 30.0);
-
-                return TransformToMarketplaceSearch(response); //function to transform json to MarketplaceSearch object
-            }
+            try { return (await FetchPageAsync(searchUrl ?? ConstantHelper.DefaultSearchUrl)).Search; }
             catch (Exception ex)
             {
-                // Callers filter out null results, so a single failed URL is logged
-                // and skipped instead of failing the whole scrape via Task.WhenAll.
-                _logger.LogError(ex, "Error fetching data from Morizon API for search URL {SearchUrl}", searchUrl);
+                _logger.LogError(ex, "Error fetching Morizon search {SearchUrl}", searchUrl);
                 return null;
+            }
+        }
+
+        private async Task<SearchPage> FetchPageAsync(string searchUrl)
+        {
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    var request = new { query = ConstantHelper.GraphqlQuery, variables = new { url = searchUrl } };
+                    var response = await _httpClient.PostAsync<object, JObject>(ConstantHelper.MorizonAPI, request, false, 30.0);
+                    if (response["errors"] is JArray errors && errors.Count > 0)
+                        throw new InvalidOperationException("Morizon returned GraphQL errors.");
+                    if (response["data"]?["searchResult"]?["properties"]?["nodes"] is not JArray nodes)
+                        throw new InvalidOperationException("Morizon response is missing its property nodes.");
+                    if (response["data"]?["searchResult"]?["properties"]?["totalCount"]?.Type != JTokenType.Integer)
+                        throw new InvalidOperationException("Morizon response is missing its result count.");
+                    return new SearchPage(TransformToMarketplaceSearch(response), nodes.Count);
+                }
+                catch (Exception ex) when (attempt < 3 &&
+                    (ex is TaskCanceledException || ex is HttpRequestException http &&
+                    (http.StatusCode is null or System.Net.HttpStatusCode.RequestTimeout or System.Net.HttpStatusCode.TooManyRequests
+                        || (int)http.StatusCode.Value >= 500)))
+                {
+                    var delay = TimeSpan.FromMilliseconds(500 * Math.Pow(2, attempt - 1));
+                    if (ex is UpstreamHttpException upstream && upstream.RetryAfter > delay) delay = upstream.RetryAfter.Value;
+                    if (delay > TimeSpan.FromMinutes(2)) throw;
+                    await Task.Delay(delay);
+                }
             }
         }
 
