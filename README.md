@@ -39,6 +39,9 @@ dotnet ef database update --project ApplicationDatabase --startup-project AF_mob
 | `AllowedOrigins:Frontend` | CORS origins, comma-separated | `http://localhost:4200` |
 | `ScrapeApiKey` | protects the scrape triggers; empty disables the gate | empty |
 | `Database:ServerVersion` | override the assumed MySQL/MariaDB version | `7.0.0` (conservative) |
+| `OlxScrape:InitialBucketSize` | initial OLX price-band width in PLN; dense bands split automatically | `1000000` |
+| `OlxScrape:MinimumBucketSize` | stop splitting dense OLX bands below this width; report remaining truncation | `5000` |
+| `OlxScrape:MaxConcurrentBuckets` | maximum concurrent OLX price-band workers | `3` |
 | `PORT` (env) | listen port | `5016` |
 
 In production, supply all of these as environment variables
@@ -79,7 +82,7 @@ triggers, which require an `X-Api-Key` header once `ScrapeApiKey` is set.
 | `propertyHistory/{city}?url=` | price history for one offer |
 | `getDashboardCharts/{city}` | the charts slice on its own |
 | `getMarketInsights/{city}` | medians, ranges, source counts, best deals |
-| `getMapPoints/{city}` | map markers, colour-graded by price/m² |
+| `getMapPoints/{city}` | map markers; `?compact=true` selects version 1 compact rows and shared text dictionaries. Both formats support Brotli/gzip, ETag and 304 |
 | `getTimelinePrice/{city}` | average price per scrape day |
 | `getGroupedStatistics/{groupBy}/{city}` | bar-chart data grouped by any field |
 | `filterByParameter/{groupBy}/{city}/{parameter}` | one series out of the above |
@@ -115,7 +118,37 @@ public whenever `ScrapeApiKey` is unset. Those details go to the log, including
 the host that was actually tried, which is the one thing the driver's own error
 message leaves out.
 
-### Scrape triggers
+### OLX preview (without database writes)
+
+`GET /api/RealEstate/olx?city=Krakow&limit=10&offset=0&priceFrom=50000&priceTo=10000000`
+
+Downloads **one page directly from OLX**, returns JSON in the request, and never
+calls the database or starts a background scrape. It uses the full scraper's
+HTTP downloader and field mapping. Supported cities: `Krakow`, `Katowice`.
+If `ScrapeApiKey` is configured, supply the `X-Api-Key` header.
+
+```powershell
+Invoke-RestMethod 'http://localhost:5016/api/RealEstate/olx?city=Krakow&limit=10' |
+    ConvertTo-Json -Depth 10
+```
+
+Parameters: `limit` 1–40 (default 40), `offset` 0–`1000-limit` (default 0),
+`priceFrom` (default 50000), `priceTo` (default 10000000). Prices must be
+nonnegative and `priceFrom <= priceTo`. To view another page, increase `offset`
+by `limit`.
+
+The response contains `savedToDatabase: false`, the exact OLX `sourceUrl`,
+`totalCount` reported by OLX (not the number downloaded), `returnedCount`, and
+`data` with IDs, titles, URLs, prices, area, price per square metre, floor,
+market, building type and location. The usual scraper filters still apply
+(e.g. TBS titles are excluded), so the returned count may be below the requested
+limit. Promoted offers may also affect OLX's page size. This is a sample page,
+not a complete market download. Responses are marked `no-store`.
+
+Invalid filters return 400; OLX/network failures or malformed responses return
+502 (including `upstreamStatusCode` for HTTP failures); timeouts return 504.
+
+### Background scrape triggers
 
 | Endpoint | Scope |
 |---|---|

@@ -1,5 +1,8 @@
 using AF_mobile_web_api.Domain;
 using AF_mobile_web_api.DTO;
+using System.Collections.Concurrent;
+using System.Buffers;
+using System.Runtime.CompilerServices;
 
 namespace AF_mobile_web_api.Services
 {
@@ -24,30 +27,81 @@ namespace AF_mobile_web_api.Services
     // The comparisons mirror utf8mb4_general_ci through the folded keys - see OfferText.
     public static class OfferQuery
     {
+        // Orders belong to one immutable snapshot and disappear when it is replaced.
+        // Store indices (four bytes each), and only build columns actually requested.
+        private static readonly ConditionalWeakTable<IReadOnlyList<OfferSnapshot>,
+            ConcurrentDictionary<(string, bool), Lazy<int[]>>> Orders = new();
+
+        private static string SortKey(string? key) => key?.ToLowerInvariant() switch
+        {
+            "price" or "pricepermeter" or "area" or "floor" or "title" or "city"
+                or "district" or "market" or "buildingtype" or "pricechange"
+                or "snapshotcount" or "firstseen" => key.ToLowerInvariant(),
+            _ => "lastseen"
+        };
+
         public static OfferPage Apply(IReadOnlyList<OfferSnapshot> offers, PropertyQueryParams query)
         {
-            var matches = Filter(offers, query);
-
             var page = Math.Max(1, query.Page);
             var pageSize = Math.Clamp(query.PageSize, 1, 200);
-
-            matches.Sort(Comparer(query.SortBy, IsDescending(query.SortDir)));
-
-            var skip = (page - 1) * pageSize;
-            var items = skip >= matches.Count
-                ? new List<OfferSnapshot>()
-                : matches.GetRange(skip, Math.Min(pageSize, matches.Count - skip));
-
-            return new OfferPage
+            var skip = (long)(page - 1) * pageSize;
+            var items = new List<OfferSnapshot>(pageSize);
+            var matches = ArrayPool<int>.Shared.Rent(offers.Count);
+            byte[]? included = null;
+            var total = 0;
+            try
             {
-                Items = items,
-                TotalCount = matches.Count,
-                Page = page,
-                PageSize = pageSize
-            };
+                // Filter in storage order for locality. A very selective filter is cheaper
+                // to sort directly than to walk an order for the entire snapshot.
+                var predicate = Predicate(query);
+                for (var i = 0; i < offers.Count; i++)
+                    if (predicate(offers[i])) matches[total++] = i;
+
+                if (skip < total)
+                {
+                    var key = (SortKey(query.SortBy), IsDescending(query.SortDir));
+                    if (total <= 2048)
+                    {
+                        var compare = Comparer(key.Item1, key.Item2);
+                        Array.Sort(matches, 0, total, System.Collections.Generic.Comparer<int>.Create((a, b) => compare(offers[a], offers[b])));
+                        for (var i = (int)skip; i < total && items.Count < pageSize; i++) items.Add(offers[matches[i]]);
+                    }
+                    else
+                    {
+                        var orders = Orders.GetValue(offers, _ => new());
+                        var order = orders.GetOrAdd(key, k => new Lazy<int[]>(() =>
+                        {
+                            var indices = Enumerable.Range(0, offers.Count).ToArray();
+                            var compare = Comparer(k.Item1, k.Item2);
+                            Array.Sort(indices, (a, b) => compare(offers[a], offers[b]));
+                            return indices;
+                        })).Value;
+                        if (total < offers.Count)
+                        {
+                            included = ArrayPool<byte>.Shared.Rent(offers.Count);
+                            Array.Clear(included, 0, offers.Count);
+                            for (var i = 0; i < total; i++) included[matches[i]] = 1;
+                        }
+                        var matched = 0;
+                        foreach (var index in order)
+                        {
+                            if (included != null && included[index] == 0) continue;
+                            if (matched++ < skip) continue;
+                            items.Add(offers[index]);
+                            if (items.Count == pageSize) break;
+                        }
+                    }
+                }
+                return new OfferPage { Items = items, TotalCount = total, Page = page, PageSize = pageSize };
+            }
+            finally
+            {
+                ArrayPool<int>.Shared.Return(matches);
+                if (included != null) ArrayPool<byte>.Shared.Return(included);
+            }
         }
 
-        private static List<OfferSnapshot> Filter(IReadOnlyList<OfferSnapshot> offers, PropertyQueryParams query)
+        private static Func<OfferSnapshot, bool> Predicate(PropertyQueryParams query)
         {
             var cities = CityKeys(query.City);
             var market = Key(query.Market);
@@ -60,43 +114,39 @@ namespace AF_mobile_web_api.Services
             var url = string.IsNullOrWhiteSpace(query.Url) ? null : query.Url.Trim();
             var search = Search(query.Search);
 
-            var matches = new List<OfferSnapshot>();
-
-            foreach (var offer in offers)
+            return offer =>
             {
-                if (cities != null && !cities.Contains(offer.CityKey)) continue;
-                if (market != null && !string.Equals(offer.MarketKey, market, StringComparison.Ordinal)) continue;
-                if (buildingType != null && !string.Equals(offer.BuildingTypeKey, buildingType, StringComparison.Ordinal)) continue;
-                if (district != null && !offer.DistrictKey.Contains(district, StringComparison.Ordinal)) continue;
-                if (title != null && !offer.TitleKey.Contains(title, StringComparison.Ordinal)) continue;
-                if (url != null && !offer.Url.Contains(url, StringComparison.OrdinalIgnoreCase)) continue;
-                if (query.WebName.HasValue && offer.WebName != query.WebName.Value) continue;
-                if (query.Private.HasValue && offer.Private != query.Private.Value) continue;
+                if (cities != null && !cities.Contains(offer.CityKey)) return false;
+                if (market != null && !string.Equals(offer.MarketKey, market, StringComparison.Ordinal)) return false;
+                if (buildingType != null && !string.Equals(offer.BuildingTypeKey, buildingType, StringComparison.Ordinal)) return false;
+                if (district != null && !offer.DistrictKey.Contains(district, StringComparison.Ordinal)) return false;
+                if (title != null && !offer.TitleKey.Contains(title, StringComparison.Ordinal)) return false;
+                if (url != null && !offer.Url.Contains(url, StringComparison.OrdinalIgnoreCase)) return false;
+                if (query.WebName.HasValue && offer.WebName != query.WebName.Value) return false;
+                if (query.Private.HasValue && offer.Private != query.Private.Value) return false;
                 // A 0 price, price per m² or area is one the portal did not state, so it is
                 // within no bound - measured as a real 0 it passed every maximum, and a list
                 // filtered to "under 300k" filled up with offers of unknown price.
-                if (!Within(offer.Price, query.PriceMin, query.PriceMax)) continue;
-                if (!Within(offer.Area, query.AreaMin, query.AreaMax)) continue;
-                if (!Within(offer.PricePerMeter, query.PricePerMeterMin, query.PricePerMeterMax)) continue;
+                if (!Within(offer.Price, query.PriceMin, query.PriceMax)) return false;
+                if (!Within(offer.Area, query.AreaMin, query.AreaMax)) return false;
+                if (!Within(offer.PricePerMeter, query.PricePerMeterMin, query.PricePerMeterMax)) return false;
                 // Floor 0 is the ground floor, a real value, so it is bounded as it stands.
-                if (query.FloorMin.HasValue && offer.Floor < query.FloorMin.Value) continue;
-                if (query.FloorMax.HasValue && offer.Floor > query.FloorMax.Value) continue;
+                if (query.FloorMin.HasValue && offer.Floor < query.FloorMin.Value) return false;
+                if (query.FloorMax.HasValue && offer.Floor > query.FloorMax.Value) return false;
                 // An unknown change is within no bound - see OfferSnapshot.PriceChange.
-                if ((query.PriceChangeMin.HasValue || query.PriceChangeMax.HasValue) && offer.PriceChange is null) continue;
-                if (query.PriceChangeMin.HasValue && offer.PriceChange < query.PriceChangeMin.Value) continue;
-                if (query.PriceChangeMax.HasValue && offer.PriceChange > query.PriceChangeMax.Value) continue;
-                if (query.SnapshotCountMin.HasValue && offer.SnapshotCount < query.SnapshotCountMin.Value) continue;
-                if (query.SnapshotCountMax.HasValue && offer.SnapshotCount > query.SnapshotCountMax.Value) continue;
+                if ((query.PriceChangeMin.HasValue || query.PriceChangeMax.HasValue) && offer.PriceChange is null) return false;
+                if (query.PriceChangeMin.HasValue && offer.PriceChange < query.PriceChangeMin.Value) return false;
+                if (query.PriceChangeMax.HasValue && offer.PriceChange > query.PriceChangeMax.Value) return false;
+                if (query.SnapshotCountMin.HasValue && offer.SnapshotCount < query.SnapshotCountMin.Value) return false;
+                if (query.SnapshotCountMax.HasValue && offer.SnapshotCount > query.SnapshotCountMax.Value) return false;
 
                 // Same as the SQL it replaces: a substring of either the title or the district.
                 if (search != null
                     && !offer.TitleKey.Contains(search, StringComparison.Ordinal)
-                    && !offer.DistrictKey.Contains(search, StringComparison.Ordinal)) continue;
+                    && !offer.DistrictKey.Contains(search, StringComparison.Ordinal)) return false;
 
-                matches.Add(offer);
-            }
-
-            return matches;
+                return true;
+            };
         }
 
         /// Inclusive bounds on a value where 0 means "not stated": with either bound set, an

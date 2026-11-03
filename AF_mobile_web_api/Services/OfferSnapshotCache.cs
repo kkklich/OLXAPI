@@ -25,6 +25,10 @@ namespace AF_mobile_web_api.Services
 
         private readonly object _gate = new();
         private Task<LoadedSnapshot>? _load;
+        private LoadedSnapshot? _current;
+        private long _generation;
+        private DateTime _validUntil;
+        private DateTime _retryAt;
 
         public OfferSnapshotCache(IServiceScopeFactory scopeFactory, ILogger<OfferSnapshotCache> logger)
         {
@@ -38,12 +42,27 @@ namespace AF_mobile_web_api.Services
 
             lock (_gate)
             {
-                if (_load is null || IsUnusable(_load))
+                var now = DateTime.UtcNow;
+                if ((_current is null || now >= _validUntil)
+                    && (_load is null || _load.IsCompleted) && now >= _retryAt)
                 {
-                    _load = LoadAsync();
+                    var generation = _generation;
+                    _load = RefreshAsync(generation);
+                    // If a scrape invalidates an already-running build, queue a fresh
+                    // build once it completes instead of waiting for the next visitor.
+                    _ = _load.ContinueWith(completed =>
+                    {
+                        lock (_gate)
+                        {
+                            if (!ReferenceEquals(_load, completed) || _generation == generation) return;
+                        }
+                        _ = RefreshInBackgroundAsync();
+                    }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
                 }
 
-                load = _load;
+                // Keep the last complete snapshot available while its replacement loads.
+                if (_current != null) return _current.Offers;
+                load = _load!;
             }
 
             // Awaited outside the lock: every caller shares the one load, only this unwrap
@@ -55,20 +74,45 @@ namespace AF_mobile_web_api.Services
         {
             lock (_gate)
             {
-                _load = null;
+                _generation++;
+                _validUntil = DateTime.MinValue;
+                _retryAt = DateTime.MinValue;
             }
+            _ = RefreshInBackgroundAsync();
         }
 
-        // A failed load must not be cached - the next request should retry rather than
-        // replay the exception for the next two hours.
-        //
-        // The age is the one this load carries, not a field any load writes: a load that an
-        // Invalidate() orphaned still runs to the end, and finishing after its replacement it
-        // used to stamp that replacement with its own time.
-        private static bool IsUnusable(Task<LoadedSnapshot> load) =>
-            load.IsFaulted
-            || load.IsCanceled
-            || (load.IsCompletedSuccessfully && DateTime.UtcNow - load.Result.LoadedAt > Ttl);
+        private async Task RefreshInBackgroundAsync()
+        {
+            try { await GetAsync(); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Offers snapshot refresh failed; the next request can retry"); }
+        }
+
+        private async Task<LoadedSnapshot> RefreshAsync(long generation)
+        {
+            try
+            {
+                var loaded = await LoadAsync();
+                lock (_gate)
+                {
+                    if (generation == _generation)
+                    {
+                        _current = loaded;
+                        _validUntil = loaded.LoadedAt + Ttl;
+                    }
+                }
+                return loaded;
+            }
+            catch (Exception ex)
+            {
+                lock (_gate)
+                {
+                    if (_current is null) throw;
+                    _retryAt = DateTime.UtcNow.AddSeconds(30);
+                    _logger.LogWarning(ex, "Serving the previous offers snapshot after a refresh failure");
+                    return _current;
+                }
+            }
+        }
 
         private async Task<LoadedSnapshot> LoadAsync()
         {

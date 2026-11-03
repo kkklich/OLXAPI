@@ -13,7 +13,7 @@ namespace AF_mobile_web_api.Tests;
 public class OlxDownloaderTests
 {
     private static OLXAPIService Create(Func<string, Task<HttpResponseMessage>> handler,
-        int concurrency = 2, int attempts = 3)
+        int concurrency = 2, int attempts = 3, int bucketSize = 50_000, int minimumBucketSize = 50_000)
     {
         var http = new Mock<IHTTPClientServices>();
         http.Setup(x => x.GetRaw(It.IsAny<string>(), It.IsAny<double?>(), It.IsAny<IDictionary<string, string>>()))
@@ -21,6 +21,7 @@ public class OlxDownloaderTests
         return new OLXAPIService(http.Object, NullLogger<OLXAPIService>.Instance,
             Options.Create(new OlxScrapeOptions {
                 MaxConcurrentBuckets = concurrency, MaxAttempts = attempts,
+                InitialBucketSize = bucketSize, MinimumBucketSize = minimumBucketSize,
                 RetryDelayMilliseconds = 0, PageDelayMilliseconds = 0
             }));
     }
@@ -173,6 +174,33 @@ public class OlxDownloaderTests
             data = new object?[] { null, new { id = "1", url = "https://www.olx.pl/d/1", @params = (object?)null } }
         })));
         Assert.Single(await service.GetAllOffersAsync(14, 4, 8959, 500_000, 549_999));
+    }
+
+    [Fact]
+    public async Task SparseWideRangeAvoidsTheOldFiftyThousandPriceBuckets()
+    {
+        int calls = 0;
+        var service = Create(_ => Task.FromResult(Page(Interlocked.Increment(ref calls), 1)), bucketSize: 1_000_000);
+        var offers = await service.GetAllOffersAsync(14, 4, 8959, 50_000, 10_000_000);
+        Assert.Equal(10, calls);
+        Assert.Equal(10, offers.Count);
+    }
+
+    [Fact]
+    public async Task SplitsAnOversizedRangeWithoutFetchingAllTwentyFiveParentPages()
+    {
+        int calls = 0;
+        var service = Create(url =>
+        {
+            Interlocked.Increment(ref calls);
+            return Task.FromResult(url.Contains("from=500000&") && url.Contains("to=1499999")
+                ? Json(new { data = new[] { new { id = "parent", url = "https://example.com/parent" } },
+                    metadata = new { visible_total_count = 1000, total_elements = 1200 } })
+                : Page(calls, 1));
+        }, bucketSize: 1_000_000, minimumBucketSize: 5_000);
+        var offers = await service.GetAllOffersAsync(14, 4, 8959, 500_000, 1_499_999);
+        Assert.Equal(3, calls);
+        Assert.Equal(3, offers.Count);
     }
 
     [Fact]

@@ -7,6 +7,6 @@ namespace AF_mobile_web_api.Services.Interfaces
     {
         /// The payload, built the first time it is asked for after a start, a scrape of that
         /// city or the cache's expiry. Throws ArgumentException for an unknown city.
-        Task<CompressedJson> GetAsync(string cityName);
+        Task<CompressedJson> GetAsync(string cityName, bool compact = false);
     }
 }

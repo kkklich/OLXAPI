@@ -1,6 +1,7 @@
 using System.Net;
 using AF_mobile_web_api.Domain;
 using AF_mobile_web_api.DTO.Enums;
+using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.Helper;
 using AF_mobile_web_api.Services.Interfaces;
 using Microsoft.Extensions.Options;
@@ -25,13 +26,45 @@ namespace AF_mobile_web_api.Services
 
         private sealed record RangeResult(List<SearchData> Offers, Exception? Error = null);
 
+        // One page through the same downloader and mapper as the full scrape, with no
+        // repository, background job, price splitting or database access.
+        public async Task<OlxPreviewResponse> GetPreviewAsync(
+            CityEnum city, int priceFrom, int priceTo, int offset, int limit)
+        {
+            var cityId = city.ToEncodedOLXString();
+            if (cityId == 0)
+                throw new ArgumentException("Podgląd OLX obsługuje miasta Krakow i Katowice.", nameof(city));
+            if (priceFrom < 0 || priceTo < priceFrom)
+                throw new ArgumentException("Ceny muszą być nieujemne, a priceTo nie może być mniejsze niż priceFrom.");
+            if (limit is < 1 or > 40)
+                throw new ArgumentOutOfRangeException(nameof(limit), "Limit musi wynosić od 1 do 40.");
+            if (offset < 0 || offset > 1000 - limit)
+                throw new ArgumentOutOfRangeException(nameof(offset), "Offset musi być nieujemny, a offset + limit nie może przekraczać 1000.");
+
+            var url = BuildOffersUrl(ConstantHelper.RealEstateCategory,
+                city.ToEncodedRegionOLXString(), cityId, priceFrom, priceTo, offset, limit);
+            var page = await GetPageAsync(url);
+            var offers = ExtractListOfParameters(page.Data
+                .Where(offer => offer != null && !string.IsNullOrWhiteSpace(offer.Id))
+                .DistinctBy(offer => offer.Id).ToList());
+
+            return new OlxPreviewResponse
+            {
+                City = city.ToString(), SourceUrl = url, Offset = offset, Limit = limit,
+                TotalCount = page.metadata == null ? null
+                    : Math.Max(page.metadata.total_elements, page.metadata.visible_total_count),
+                Data = offers
+            };
+        }
+
         public async Task<List<SearchData>> GetAllOffersAsync(
             int categoryId, int? regionId, int? cityId, int priceFrom, int priceTo)
         {
-            const int bucketSize = 50_000;
+            var bucketSize = Math.Clamp(_options.InitialBucketSize, 5_000, 10_000_000);
             var ranges = new List<(int From, int To)>();
-            for (var from = priceFrom; from <= priceTo; from += bucketSize)
-                ranges.Add((from, Math.Min(from + bucketSize - 1, priceTo)));
+            if (priceFrom < 0 || priceTo < priceFrom) throw new ArgumentOutOfRangeException(nameof(priceFrom));
+            for (long from = priceFrom; from <= priceTo; from += bucketSize)
+                ranges.Add(((int)from, (int)Math.Min(from + bucketSize, priceTo)));
 
             // Previously every one of ~200 ranges started an HTTP request immediately.
             using var slots = new SemaphoreSlim(Math.Clamp(_options.MaxConcurrentBuckets, 1, 8));
@@ -71,6 +104,15 @@ namespace AF_mobile_web_api.Services
             var seen = new HashSet<string>(StringComparer.Ordinal);
             const int limit = 40;
             const int maxOffset = 1000;
+            async Task<RangeResult> SplitAsync()
+            {
+                var middle = priceFrom + (priceTo - priceFrom) / 2;
+                var left = await FetchRangeAsync(categoryId, regionId, cityId, priceFrom, middle);
+                var right = await FetchRangeAsync(categoryId, regionId, cityId, middle, priceTo);
+                return new(offers.Concat(left.Offers).Concat(right.Offers).DistinctBy(offer => offer.Id).ToList(),
+                    left.Error ?? right.Error);
+            }
+            bool CanSplit() => priceTo - priceFrom > Math.Max(1, _options.MinimumBucketSize);
             try
             {
                 for (var offset = 0; offset < maxOffset; offset += limit)
@@ -80,14 +122,23 @@ namespace AF_mobile_web_api.Services
                     var newIds = page.Where(offer => offer != null && !string.IsNullOrWhiteSpace(offer.Id))
                         .Where(offer => seen.Add(offer.Id)).ToList();
                     offers.AddRange(ExtractListOfParameters(newIds));
+                    // A wide, sparse band needs only one page. Split dense bands before
+                    // paying for all 25 pages of a search the portal would truncate.
+                    if (offset == 0 && CanSplit()
+                        && Math.Max(data.metadata?.total_elements ?? 0, data.metadata?.visible_total_count ?? 0) > maxOffset)
+                        return await SplitAsync();
                     // Promoted offers repeat across pages. A repeated page is not more data.
                     var visibleCount = data.metadata?.visible_total_count;
                     if (offset + limit >= maxOffset && data.metadata?.total_elements > maxOffset)
+                    {
+                        if (CanSplit()) return await SplitAsync();
                         return new(offers, new InvalidOperationException("OLX search contains more offers than its pagination limit."));
+                    }
                     if (newIds.Count == 0 || (visibleCount > 0 && offset + limit >= visibleCount)
                         || (visibleCount is null or <= 0 && page.Count < limit)) return new(offers);
                     if (offset + limit >= maxOffset)
                     {
+                        if (CanSplit()) return await SplitAsync();
                         _logger.LogWarning("OLX pagination cap reached for {From}-{To}; retaining {Count} offers", priceFrom, priceTo, offers.Count);
                         return new(offers, new InvalidOperationException("OLX pagination limit reached before the range was exhausted."));
                     }
