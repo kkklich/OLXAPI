@@ -182,9 +182,9 @@ namespace AF_mobile_web_api.Controllers
         // entity tag lets the browser keep a copy and revalidate it: a map reopened after a
         // reload costs a 304 until a scrape changes the points.
         [HttpGet("getMapPoints/{city}")]
-        public async Task<IActionResult> GetMapPoints(string city)
+        public async Task<IActionResult> GetMapPoints(string city, [FromQuery] bool compact = false)
         {
-            var payload = await _mapPoints.GetAsync(city);
+            var payload = await _mapPoints.GetAsync(city, compact);
 
             var headers = Response.GetTypedHeaders();
             headers.ETag = payload.ETag;

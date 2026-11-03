@@ -43,7 +43,7 @@ public class ScrapePipelineTests
         repository.Setup(x => x.SaveMarketplaceDataAsync(It.IsAny<List<PropertyData>>()))
             .Callback<List<PropertyData>>(data => saved = data).Returns(Task.CompletedTask);
         var service = new RealEstateServices(olx.Object, morizon.Object, nieruchomosci.Object,
-            mapper.Object, repository.Object, cache, offers.Object, NullLogger<RealEstateServices>.Instance);
+            mapper.Object, repository.Object, new ReadCache(cache), offers.Object, NullLogger<RealEstateServices>.Instance);
 
         var error = await Assert.ThrowsAsync<AggregateException>(() => service.LoadDataMarkeplacesAsync());
         Assert.Contains("OLX (Krakow)", Assert.Single(error.InnerExceptions).Message);
@@ -62,7 +62,13 @@ public class ScrapePipelineTests
         var nieruchomosci = new Mock<INieruchomosciOnlineService>();
         var repository = new Mock<IPropertyDataRepository>();
         var mapper = new Mock<IMapper>();
+        var snapshots = new Mock<IOfferSnapshotCache>();
         using var cache = new MemoryCache(new MemoryCacheOptions());
+        foreach (var area in new[] { "Krakow", "Silesia", "Katowice" })
+        {
+            cache.Set(MapPointsPayloadProvider.CacheKey(area), new object());
+            cache.Set(MapPointsPayloadProvider.CacheKey(area, compact: true), new object());
+        }
         olx.Setup(x => x.GetOLXResponse(It.IsAny<CityEnum>())).ReturnsAsync(new MarketplaceSearch());
         morizon.Setup(x => x.GetPropertyListingDataAsync(It.IsAny<CityEnum>()))
             .ReturnsAsync(new MarketplaceSearch { Data = new() { Offer("morizon") } });
@@ -72,12 +78,18 @@ public class ScrapePipelineTests
             .Returns((object input) => ((List<SearchData>)input).Select(x => new PropertyData { Url = x.Url }).ToList());
         repository.Setup(x => x.SaveMarketplaceDataAsync(It.IsAny<List<PropertyData>>())).Returns(Task.CompletedTask);
         var service = new RealEstateServices(olx.Object, morizon.Object, nieruchomosci.Object,
-            mapper.Object, repository.Object, cache, Mock.Of<IOfferSnapshotCache>(), NullLogger<RealEstateServices>.Instance);
+            mapper.Object, repository.Object, new ReadCache(cache), snapshots.Object, NullLogger<RealEstateServices>.Instance);
 
         var error = await Assert.ThrowsAsync<AggregateException>(() => service.GetdataForManyCitiesAsync());
         // Only Krakow and Katowice have configured OLX ids; intentional skips are not failures.
         Assert.Equal(2, error.Flatten().InnerExceptions.Count);
         repository.Verify(x => x.SaveMarketplaceDataAsync(It.IsAny<List<PropertyData>>()), Times.Exactly(7));
+        snapshots.Verify(x => x.Invalidate(), Times.Once);
+        foreach (var area in new[] { "Krakow", "Silesia", "Katowice" })
+        {
+            Assert.False(cache.TryGetValue(MapPointsPayloadProvider.CacheKey(area), out _));
+            Assert.False(cache.TryGetValue(MapPointsPayloadProvider.CacheKey(area, compact: true), out _));
+        }
     }
 
     [Theory]

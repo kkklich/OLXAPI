@@ -4,10 +4,9 @@ using System.Security.Cryptography;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using AF_mobile_web_api.Domain;
-using AF_mobile_web_api.DTO.Enums;
+using AF_mobile_web_api.DTO;
 using AF_mobile_web_api.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Microsoft.Net.Http.Headers;
 
@@ -32,13 +31,13 @@ namespace AF_mobile_web_api.Services
         private const int BrotliWindow = 22;
 
         private readonly IStatisticServices _statistics;
-        private readonly IMemoryCache _cache;
+        private readonly ReadCache _cache;
         private readonly JsonSerializerOptions _json;
         private readonly ILogger<MapPointsPayloadProvider> _logger;
 
         public MapPointsPayloadProvider(
             IStatisticServices statistics,
-            IMemoryCache cache,
+            ReadCache cache,
             IOptions<JsonOptions> json,
             ILogger<MapPointsPayloadProvider> logger)
         {
@@ -58,43 +57,38 @@ namespace AF_mobile_web_api.Services
 
         // Evicted with the city's other dashboard entries when a scrape of it lands
         // (RealEstateServices), and expiring with them.
-        public static string CacheKey(CityEnum city) => $"MapPointsPayload_{city}";
+        public static string CacheKey(string area, bool compact = false) =>
+            $"MapPointsPayload_{area}{(compact ? "_compact_v1" : "")}";
 
-        public async Task<CompressedJson> GetAsync(string cityName)
+        public async Task<CompressedJson> GetAsync(string cityName, bool compact = false)
         {
-            var city = StatisticServices.ParseCity(cityName);
-            var cacheKey = CacheKey(city);
-
-            if (_cache.TryGetValue(cacheKey, out CompressedJson? cached) && cached is not null)
+            var area = CityArea.Parse(cityName);
+            var cacheKey = CacheKey(area.Name, compact);
+            return await _cache.GetAsync(cacheKey, StatisticServices.CacheDuration, async () =>
             {
-                return cached;
-            }
+                var stopwatch = Stopwatch.StartNew();
 
-            var stopwatch = Stopwatch.StartNew();
+                var points = await _statistics.GetMapPoints(area.Name);
+                var json = compact
+                    ? JsonSerializer.SerializeToUtf8Bytes(CompactMapPointsDTO.From(points), _json)
+                    : JsonSerializer.SerializeToUtf8Bytes(points, _json);
 
-            var points = await _statistics.GetMapPoints(city.ToString());
-            var json = JsonSerializer.SerializeToUtf8Bytes(points, _json);
+                var payload = new CompressedJson
+                {
+                    Brotli = CompressBrotli(json),
+                    Gzip = CompressGzip(json),
+                    // Over the uncompressed JSON, so it names the data, not one encoding of it, and
+                    // an unchanged batch keeps its tag across restarts.
+                    ETag = new EntityTagHeaderValue($"\"{Convert.ToHexString(SHA256.HashData(json), 0, 16)}\"", isWeak: true),
+                    JsonLength = json.Length
+                };
 
-            var payload = new CompressedJson
-            {
-                Brotli = CompressBrotli(json),
-                Gzip = CompressGzip(json),
-                // Over the uncompressed JSON, so it names the data, not one encoding of it, and
-                // an unchanged batch keeps its tag across restarts.
-                ETag = new EntityTagHeaderValue($"\"{Convert.ToHexString(SHA256.HashData(json), 0, 16)}\"", isWeak: true),
-                JsonLength = json.Length
-            };
+                _logger.LogInformation(
+                    "Built map points of {City}: {Points} points, {Json} B of JSON, {Brotli} B br, {Gzip} B gzip in {Elapsed} ms",
+                    area.Name, points.Count, json.Length, payload.Brotli.Length, payload.Gzip.Length, stopwatch.ElapsedMilliseconds);
 
-            _cache.Set(cacheKey, payload, new MemoryCacheEntryOptions
-            {
-                AbsoluteExpirationRelativeToNow = StatisticServices.CacheDuration
+                return payload;
             });
-
-            _logger.LogInformation(
-                "Built map points of {City}: {Points} points, {Json} B of JSON, {Brotli} B br, {Gzip} B gzip in {Elapsed} ms",
-                city, points.Count, json.Length, payload.Brotli.Length, payload.Gzip.Length, stopwatch.ElapsedMilliseconds);
-
-            return payload;
         }
 
         private static byte[] CompressBrotli(byte[] json)

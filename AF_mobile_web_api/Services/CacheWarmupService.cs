@@ -50,6 +50,12 @@ namespace AF_mobile_web_api.Services
                     await statistics.GetFullDashboardDataAsync(area.Name);
                 }, stoppingToken);
 
+                await WarmAsync($"compact map {area.Name}", async () =>
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var payloads = scope.ServiceProvider.GetRequiredService<IMapPointsPayloadProvider>();
+                    await payloads.GetAsync(area.Name, compact: true);
+                }, stoppingToken);
 
                 // Requested alongside the dashboard on every visit, and ~1.8s to build cold.
                 await WarmAsync($"price drops {area.Name}", async () =>

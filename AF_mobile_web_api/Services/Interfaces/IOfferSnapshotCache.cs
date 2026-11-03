@@ -8,7 +8,8 @@ namespace AF_mobile_web_api.Services.Interfaces
         /// Concurrent callers share one load instead of each running the scan.
         Task<IReadOnlyList<OfferSnapshot>> GetAsync();
 
-        /// Drops the snapshot; the next ask rebuilds it. Called when a scrape adds rows.
+        /// Refreshes in the background, keeping the previous complete snapshot readable.
+        /// Called once after a multi-city scrape, or after saving a single city.
         void Invalidate();
     }
 }
