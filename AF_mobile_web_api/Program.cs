@@ -44,6 +44,9 @@ builder.Services.AddScoped<IPropertyComparer, PropertyComparer>();
 
 builder.Services.Configure<OlxScrapeOptions>(builder.Configuration.GetSection("OlxScrape"));
 builder.Services.AddScoped<IOLXAPIService, OLXAPIService>();
+builder.Services.AddScoped<IOlxListingsService, OlxListingsService>();
+builder.Services.AddScoped<IOtodomListingsService, OtodomListingsService>();
+builder.Services.AddScoped<MarketplaceListingsService>();
 builder.Services.AddScoped<INieruchomosciOnlineService, NieruchomosciOnlineService>();
 builder.Services.AddScoped<IMorizonApiService, MorizonApiService>();
 builder.Services.AddScoped<IRealEstateServices, RealEstateServices>();

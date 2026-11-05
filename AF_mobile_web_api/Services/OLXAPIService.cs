@@ -228,7 +228,7 @@ namespace AF_mobile_web_api.Services
             return result;
         }
 
-        private SearchData ExtractParameter(Data data)
+        internal static SearchData ExtractParameter(Data data)
         {
             var record = MapParamsToSearchData(data.Params);
 
@@ -249,7 +249,7 @@ namespace AF_mobile_web_api.Services
             return record;
         }
 
-        private SearchData MapParamsToSearchData(List<Param>? parameters)
+        private static SearchData MapParamsToSearchData(List<Param>? parameters)
         {
             var data = new SearchData();
             foreach (var param in parameters ?? new List<Param>())
@@ -288,7 +288,7 @@ namespace AF_mobile_web_api.Services
             return data;
         }
 
-        private double ParseNumberToDouble(string priceString)
+        private static double ParseNumberToDouble(string priceString)
         {
             if (string.IsNullOrWhiteSpace(priceString))
                 return 0;
