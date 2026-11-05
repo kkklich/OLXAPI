@@ -148,6 +148,70 @@ not a complete market download. Responses are marked `no-store`.
 Invalid filters return 400; OLX/network failures or malformed responses return
 502 (including `upstreamStatusCode` for HTTP failures); timeouts return 504.
 
+### Live OLX and Otodom listings by city or area (no database writes)
+
+`GET /api/RealEstate/marketplaceListings?city=Silesia&source=all&page=1&priceFrom=50000&priceTo=10000000`
+
+Fetches one live **apartment-for-sale** search page directly from each selected
+portal and city, and returns the listings in the same request. No database is
+read or written and no background scrape starts. Use `X-Api-Key` when
+`ScrapeApiKey` is configured; responses are marked `no-store`.
+
+```powershell
+# Both portals, Kraków (Krakow and Kraków are accepted)
+Invoke-RestMethod 'http://localhost:5016/api/RealEstate/marketplaceListings?city=Krakow'
+
+# Otodom only, all six cities in the app's Silesia area
+Invoke-RestMethod 'http://localhost:5016/api/RealEstate/marketplaceListings?city=Silesia&source=otodom&page=2'
+
+# OLX only, a price range, with the configured API key
+Invoke-RestMethod 'http://localhost:5016/api/RealEstate/marketplaceListings?city=Silesia&source=olx&priceFrom=300000&priceTo=800000' -Headers @{ 'X-Api-Key' = $env:SCRAPE_API_KEY }
+```
+
+| Parameter | Values / default |
+|---|---|
+| `city` | `Krakow` (default), `Silesia`, or any existing individual city; Polish city spellings and case-insensitive names accepted |
+| `source` | `all` (default), `olx`, `otodom` |
+| `page` | 1–27, default 1; applied **independently to each city and portal** |
+| `priceFrom`, `priceTo` | PLN, default 50000–10000000; nonnegative and ordered |
+
+Silesia means Katowice, Chorzów, Tychy, Mikołów, Mysłowice and Sosnowiec,
+matching the dashboard; it does not mean the whole Śląskie province. Each page
+requests 36 slots per city/source (Otodom's supported page size), with at most
+three upstream calls running concurrently. Silesia with `all` makes 12 calls.
+Promoted cards, duplicates and strict city/price filtering can change the
+returned count. This is a paged sample, not a complete inventory download.
+
+The JSON response includes `city`, `source`, `savedToDatabase: false`,
+`fetchedAt`, `page`, `pageSize`, `returnedCount`, `isPartial`, `hasMore`,
+`nextPage`, `paginationLimitReached`, `pages` and `data`. Each `pages` entry
+identifies its city/source, exact upstream URL, upstream `totalCount`, retained
+count and any `error`. Totals belong to their individual upstream searches,
+before local filtering/deduplication; they are not summed into a market total.
+An empty filtered page need not be the end: follow `nextPage`. At page 27,
+`nextPage` is null even if `hasMore` is true, and `paginationLimitReached`
+identifies this shared pagination boundary. Narrow the price range to explore
+beyond it. Pages reflect a changing live market, not a stable snapshot.
+
+`data` uses the existing listing shape. `webName` is `0` for OLX listings or
+`3` for Otodom listings (including verified OLX partner listings). OLX partner
+links are converted to their original Otodom URL only for this endpoint, so
+cross-listed offers are merged by URL. Direct Otodom fields take precedence;
+missing district, coordinates, market and building type can be filled from the
+matching OLX card. IDs are portal-local; use the URL as the offer identity.
+Otodom search cards alone omit coordinates, market and building type, so these
+remain `0`/empty when no matching OLX card supplies them. Offers without a
+price are excluded unless `priceFrom=0`.
+
+Invalid input returns 400 before making upstream calls. Some failed city/source
+requests return 200 with `isPartial: true`, explicit `pages[].error`, and the
+remaining listings. If every request fails, the API returns 502 (or 504 when
+all failures are timeouts). Every upstream call has a 30-second timeout and
+client cancellation is forwarded. A successful empty search remains 200.
+OLX's search JSON and Otodom's embedded `__NEXT_DATA__` are website interfaces,
+not the authenticated partner publishing APIs; changes or access restrictions
+are surfaced as upstream errors rather than successful empty results.
+
 ### Background scrape triggers
 
 | Endpoint | Scope |

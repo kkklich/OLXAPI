@@ -34,8 +34,9 @@
         //public Contact Contact { get; set; }
         public List<Photo> Photos { get; set; }
         public Location Location { get; set; }
-        //public Partner Partner { get; set; }
-        //public string ExternalUrl { get; set; }
+        public Partner? Partner { get; set; }
+        [Newtonsoft.Json.JsonProperty("external_url")]
+        public string? ExternalUrl { get; set; }
         //public Category Category { get; set; }
         //public Delivery Delivery { get; set; }
         //public Safedeal Safedeal { get; set; }

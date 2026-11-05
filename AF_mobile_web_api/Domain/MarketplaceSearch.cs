@@ -39,7 +39,8 @@
     {
         OLX,
         Morizon,
-        NieruchomsciOnline
+        NieruchomsciOnline,
+        Otodom
     }
 
 
