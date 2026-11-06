@@ -1,4 +1,3 @@
-using AF_mobile_web_api.Mappings;
 using AF_mobile_web_api.Middleware;
 using AF_mobile_web_api.Repositories;
 using AF_mobile_web_api.Repositories.Interfaces;
@@ -30,7 +29,6 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         builder.Configuration.GetConnectionString("ConnectionString"),
         serverVersion
     ));
-builder.Services.AddAutoMapper(typeof(MappingProfile));
 
 
 builder.Services.AddHttpClient(); // Still needed for the factory!
@@ -67,6 +65,8 @@ builder.Services.AddHostedService<CacheWarmupService>();
 
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ReadCache>();
+builder.Services.AddSingleton<PropertyHistoryCache>();
+builder.Services.AddPropertyHistoryRateLimiting(builder.Configuration);
 
 builder.Services.AddResponseCompression(options =>
 {
@@ -116,7 +116,11 @@ app.UseResponseCompression();
 
 app.UseMiddleware<ExceptionMiddleware>();
 
+app.UseRouting();
+
 app.UseCors("AllowSpecificOrigin");
+
+app.UseRateLimiter();
 
 app.UseAuthorization();
 

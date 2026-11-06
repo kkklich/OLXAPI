@@ -13,12 +13,14 @@ namespace AF_mobile_web_api.Services
         private readonly IPropertyDataRepository _repo;
         private readonly IPropertyComparer _comparer;
         private readonly IOfferSnapshotCache _offers;
+        private readonly PropertyHistoryCache _historyCache;
 
-        public PropertyListService(IPropertyDataRepository repo, IPropertyComparer comparer, IOfferSnapshotCache offers)
+        public PropertyListService(IPropertyDataRepository repo, IPropertyComparer comparer, IOfferSnapshotCache offers, PropertyHistoryCache historyCache)
         {
             _repo = repo;
             _comparer = comparer;
             _offers = offers;
+            _historyCache = historyCache;
         }
 
         // Filtering, sorting, paging and display fields all use the in-memory snapshot.
@@ -74,9 +76,14 @@ namespace AF_mobile_web_api.Services
             };
         }
 
-        public async Task<PropertyHistoryDTO?> GetHistoryAsync(string city, string url)
+        public Task<PropertyHistoryDTO?> GetHistoryAsync(string city, string url, CancellationToken cancellationToken = default)
         {
-            var target = await _repo.GetLatestByUrlAsync(city, url);
+            return _historyCache.GetAsync(city, url, ct => BuildHistoryAsync(city, url, ct), cancellationToken);
+        }
+
+        private async Task<PropertyHistoryDTO?> BuildHistoryAsync(string city, string url, CancellationToken cancellationToken)
+        {
+            var target = await _repo.GetLatestByUrlAsync(city, url, cancellationToken);
             if (target == null)
             {
                 return null;
@@ -109,7 +116,7 @@ namespace AF_mobile_web_api.Services
                     }
             };
 
-            var candidates = await _repo.GetHistoryCandidatesAsync(city, filter);
+            var candidates = await _repo.GetHistoryCandidatesAsync(city, filter, cancellationToken);
 
             var matches = _comparer.FindMatches(target, candidates);
             if (matches.Count == 0)

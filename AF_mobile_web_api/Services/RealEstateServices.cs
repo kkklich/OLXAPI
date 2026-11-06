@@ -4,7 +4,7 @@ using AF_mobile_web_api.DTO.Enums;
 using AF_mobile_web_api.Repositories.Interfaces;
 using AF_mobile_web_api.Services.Interfaces;
 using ApplicationDatabase.Models;
-using AutoMapper;
+using AF_mobile_web_api.Mappings;
 
 namespace AF_mobile_web_api.Services
 {
@@ -13,9 +13,9 @@ namespace AF_mobile_web_api.Services
         private readonly IOLXAPIService _olxApiService;
         private readonly IMorizonApiService _morizonApiService;
         private readonly INieruchomosciOnlineService _nieruchomosciOnlineService;
-        private readonly IMapper _mapper;
         private readonly IPropertyDataRepository _propertyDataRepository;
         private readonly ReadCache _cache;
+        private readonly PropertyHistoryCache _historyCache;
         private bool _multiCityScrape;
         private readonly IOfferSnapshotCache _offers;
         private readonly ILogger<RealEstateServices> _logger;
@@ -24,19 +24,19 @@ namespace AF_mobile_web_api.Services
             IOLXAPIService olxApiService,
             IMorizonApiService morizonApiService,
             INieruchomosciOnlineService nieruchomosciOnlineService,
-            IMapper mapper,
             IPropertyDataRepository propertyDataRepository,
             ReadCache cache,
             IOfferSnapshotCache offers,
+            PropertyHistoryCache historyCache,
             ILogger<RealEstateServices> logger)
         {
             _olxApiService = olxApiService;
             _morizonApiService = morizonApiService;
             _nieruchomosciOnlineService = nieruchomosciOnlineService;
-            _mapper = mapper;
             _propertyDataRepository = propertyDataRepository;
             _cache = cache;
             _offers = offers;
+            _historyCache = historyCache;
             _logger = logger;
         }
 
@@ -65,7 +65,7 @@ namespace AF_mobile_web_api.Services
             return await _cache.GetAsync(cacheKey, StatisticServices.CacheDuration, async () =>
             {
                 var latestBatch = await _propertyDataRepository.GetLatestByCityAsync(city.ToString());
-                return _mapper.Map<List<SearchData>>(latestBatch);
+                return latestBatch.Select(PropertyMapping.ToSearchData).ToList();
             });
         }
 
@@ -142,7 +142,7 @@ namespace AF_mobile_web_api.Services
             }
             combinedData.Data = uniqueByUrl;
 
-            var propertiesList = _mapper.Map<List<PropertyData>>(combinedData.Data);
+            var propertiesList = combinedData.Data.Select(PropertyMapping.ToPropertyData).ToList();
 
             // Stamp every row of this scrape with the same timestamp so it forms one identifiable
             // batch: GetLatestByCityAsync selects the newest batch for the snapshot charts.
@@ -154,6 +154,7 @@ namespace AF_mobile_web_api.Services
             }
 
             await _propertyDataRepository.SaveMarketplaceDataAsync(propertiesList);
+            _historyCache.Invalidate();
 
             // StatisticServices caches these entries for 120 minutes, per city and per area of
             // cities (CityArea); evict every one that includes this city so dashboards pick up
@@ -210,7 +211,7 @@ namespace AF_mobile_web_api.Services
                 var key = (item.Area, item.Floor, item.Market, item.Price);
                 if (!uniqueDict.TryGetValue(key, out var unique))
                 {
-                    uniqueDict[key] = _mapper.Map<SearchDataDTO>(item);
+                    uniqueDict[key] = PropertyMapping.ToDto(item);
                 }
                 else
                 {

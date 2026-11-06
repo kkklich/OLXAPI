@@ -20,6 +20,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          if [ -z "${SCRAPE_API_KEY:-}" ]; then
+            echo "Error: Set the SCRAPE_API_KEY repository secret before running the weekly scrape."
+            exit 1
+          fi
+
           echo "============================================================"
           echo "Step 1: Waking up Render service (cold start)..."
           echo "============================================================"

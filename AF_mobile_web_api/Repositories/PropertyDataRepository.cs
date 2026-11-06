@@ -182,19 +182,19 @@ namespace AF_mobile_web_api.Repositories
         }
 
         // Target row for a history lookup: the newest snapshot of a given Url in a city.
-        public async Task<PropertyData?> GetLatestByUrlAsync(string city, string url)
+        public async Task<PropertyData?> GetLatestByUrlAsync(string city, string url, CancellationToken cancellationToken = default)
         {
             return await _dbSet.AsNoTracking()
                 .Where(p => p.City == city && p.Url == url)
                 .OrderByDescending(p => p.AddedRecordTime)
-                .FirstOrDefaultAsync();
+                .FirstOrDefaultAsync(cancellationToken);
         }
 
         // Narrow candidate set for same-offer matching: the rows of a city the comparer could
         // accept - by Url, or by meeting its fuzzy rules' hard requirements. See
         // HistoryCandidateFilter. The comparer still makes every decision; this only decides
         // what is worth sending over the wire for it to look at.
-        public async Task<List<PropertyData>> GetHistoryCandidatesAsync(string city, HistoryCandidateFilter filter)
+        public async Task<List<PropertyData>> GetHistoryCandidatesAsync(string city, HistoryCandidateFilter filter, CancellationToken cancellationToken = default)
         {
             var rows = _dbSet.AsNoTracking().Where(p => p.City == city);
 
@@ -228,7 +228,7 @@ namespace AF_mobile_web_api.Repositories
                 return new List<PropertyData>();
             }
 
-            return await rows.ToListAsync();
+            return await rows.ToListAsync(cancellationToken);
         }
 
         // Offers whose price fell from the previous scrape to the newest one.
