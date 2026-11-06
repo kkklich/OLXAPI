@@ -124,7 +124,8 @@ message leaves out.
 
 Downloads **one page directly from OLX**, returns JSON in the request, and never
 calls the database or starts a background scrape. It uses the full scraper's
-HTTP downloader and field mapping. Supported cities: `Krakow`, `Katowice`.
+HTTP downloader and field mapping. Supported cities: `Krakow`, `Katowice`,
+`Chorzow`, `Tychy`, `Mikolow`, `Myslowice`, `Sosnowiec`.
 If `ScrapeApiKey` is configured, supply the `X-Api-Key` header.
 
 ```powershell
@@ -227,10 +228,28 @@ a time. Since the Silesian cities were added, a full run covers seven cities
 instead of two; the requests per city are set by price ranges, not by how many
 offers a city has, so expect it to take about three and a half times as long.
 
-OLX filters by a numeric `city_id` per city (`CityExtensions`). Only Kraków's
-and Katowice's are known so far; the other Silesian cities are scraped from
-Morizon and Nieruchomości-online only — OLX is skipped for them, with a warning
-in the log — until their ids are added.
+The weekly GitHub Actions workflow (`.github/workflows/call-api.yml`) runs on
+Sunday at 11:00 Europe/Warsaw and can also be started manually. It calls
+`getdataForManyCities`, which downloads and **saves timestamped database
+snapshots** from OLX, Morizon and Nieruchomości-online for all seven configured
+cities. OLX uses the same verified city IDs as the live reader, follows pages
+and splits dense price ranges; it does not save just the preview's first page.
+Persisted OLX URLs/source identifiers retain their existing format. Direct
+Otodom searches remain part of the read-only live endpoint.
+
+When `ScrapeApiKey` is configured on the API, set the matching `SCRAPE_API_KEY`
+repository secret. Before starting, the workflow checks database connectivity;
+on completion it requires a successful run, a new
+completion timestamp and a changed database `lastScrapedAt`. A stale result,
+debug-only scrape, failed source or unavailable database fails the workflow
+instead of being reported as a successful save. Concurrent weekly workflow runs
+are serialized, and successful partial-source downloads are still retained by
+the existing save pipeline even when the overall run is marked failed.
+
+OLX access must work from the deployed API's hosting network. A successful local
+preview does not prove that Render can fetch the same URL: an upstream 403 is
+reported as an OLX source failure, and the workflow must not claim a successful
+OLX save until that access problem is resolved.
 
 ```bash
 curl -H "X-Api-Key: $KEY" http://localhost:5016/api/RealEstate/getdataForManyCities

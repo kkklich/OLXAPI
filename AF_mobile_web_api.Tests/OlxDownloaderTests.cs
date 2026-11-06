@@ -204,9 +204,9 @@ public class OlxDownloaderTests
     }
 
     [Fact]
-    public async Task UnsupportedCityMakesNoRequests()
+    public async Task UnknownCityMakesNoRequests()
     {
         var service = Create(_ => throw new Exception("Must not be called"));
-        Assert.Empty((await service.GetOLXResponse(CityEnum.Tychy)).Data);
+        Assert.Empty((await service.GetOLXResponse((CityEnum)999)).Data);
     }
 }

@@ -33,7 +33,7 @@ public sealed class OlxPreviewController : ControllerBase
         [FromQuery] int limit = 40)
     {
         if (!CityExtensions.TryParseName(city, out var parsedCity))
-            return BadRequest(new { message = "Podgląd OLX obsługuje miasta Krakow i Katowice." });
+            return BadRequest(new { message = "Nieobsługiwane miasto OLX. Użyj nazwy miasta, np. Krakow lub Katowice." });
 
         try
         {
