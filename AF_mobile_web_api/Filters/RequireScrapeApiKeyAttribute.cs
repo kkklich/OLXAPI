@@ -17,7 +17,6 @@ namespace AF_mobile_web_api.Filters
     {
         private const string HeaderName = "X-Api-Key";
         private const string ConfigKey = "ScrapeApiKey";
-        public bool Required { get; set; }
 
         public Task OnAuthorizationAsync(AuthorizationFilterContext context)
         {
@@ -27,7 +26,6 @@ namespace AF_mobile_web_api.Filters
             // Empty/missing key means the gate is intentionally disabled
             if (string.IsNullOrWhiteSpace(expectedKey))
             {
-                if (Required) context.Result = new UnauthorizedResult();
                 return Task.CompletedTask;
             }
 

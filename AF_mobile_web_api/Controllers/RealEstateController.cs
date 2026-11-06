@@ -99,7 +99,6 @@ namespace AF_mobile_web_api.Controllers
         // Each poll uses the same Actions run ID, including after a workflow rerun.
         // The database decides which city is next even if the API process has changed.
         [HttpPost("weeklyScrapes/{runId:long:min(1)}")]
-        [RequireScrapeApiKey(Required = true)]
         public async Task<IActionResult> AdvanceWeeklyScrape(long runId, [FromServices] IPropertyDataRepository propertyRepo,
             [FromQuery] int attempt = 1)
         {
