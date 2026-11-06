@@ -81,8 +81,9 @@ public class ScrapePipelineTests
             mapper.Object, repository.Object, new ReadCache(cache), snapshots.Object, NullLogger<RealEstateServices>.Instance);
 
         var error = await Assert.ThrowsAsync<AggregateException>(() => service.GetdataForManyCitiesAsync());
-        // Only Krakow and Katowice have configured OLX ids; intentional skips are not failures.
-        Assert.Equal(2, error.Flatten().InnerExceptions.Count);
+        // OLX is required for every configured city, so an empty response fails each city
+        // after the healthy sources have still been saved.
+        Assert.Equal(7, error.Flatten().InnerExceptions.Count);
         repository.Verify(x => x.SaveMarketplaceDataAsync(It.IsAny<List<PropertyData>>()), Times.Exactly(7));
         snapshots.Verify(x => x.Invalidate(), Times.Once);
         foreach (var area in new[] { "Krakow", "Silesia", "Katowice" })

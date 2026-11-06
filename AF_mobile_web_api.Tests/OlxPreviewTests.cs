@@ -75,7 +75,7 @@ public class OlxPreviewTests
     [Theory]
     [InlineData("unknown", 0, 500000, 0, 40)]
     [InlineData("1", 0, 500000, 0, 40)]
-    [InlineData("Tychy", 0, 500000, 0, 40)]
+    [InlineData("Silesia", 0, 500000, 0, 40)]
     [InlineData("Krakow", -1, 500000, 0, 40)]
     [InlineData("Krakow", 500000, 499999, 0, 40)]
     [InlineData("Krakow", 0, 500000, 0, 0)]

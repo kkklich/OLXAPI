@@ -7,6 +7,10 @@ on:
       timezone: 'Europe/Warsaw'
   workflow_dispatch: # Allows manual run
 
+concurrency:
+  group: weekly-marketplace-scrape
+  cancel-in-progress: false
+
 jobs:
   call-api:
     runs-on: ubuntu-latest
@@ -40,6 +44,26 @@ jobs:
             fi
             sleep 10
           done
+
+          # Fail before downloading thousands of listings if they cannot be saved.
+          if ! DB_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 \
+            -H "X-Api-Key: ${SCRAPE_API_KEY}" "${RENDER_URL}/api/Health/db"); then
+            DB_STATUS="000"
+          fi
+          if [ "$DB_STATUS" != "200" ]; then
+            echo "Error: Database is not reachable (HTTP $DB_STATUS); no scrape was started."
+            exit 1
+          fi
+
+          # Remember the previous save/completion so an old successful result, a
+          # debug-only scrape or an API restart cannot be mistaken for a new save.
+          BASELINE_JSON=$(curl --fail -sS --max-time 20 "${RENDER_URL}/api/RealEstate/scrapeStatus")
+          if ! jq -e '(.isRunning | type) == "boolean"' <<< "$BASELINE_JSON" > /dev/null; then
+            echo "Error: Could not read the current scrape status."
+            exit 1
+          fi
+          BASELINE_SAVED_AT=$(jq -r '.lastScrapedAt // ""' <<< "$BASELINE_JSON")
+          BASELINE_COMPLETED_AT=$(jq -r '.lastCompletedAt // ""' <<< "$BASELINE_JSON")
 
           echo ""
           echo "============================================================"
@@ -88,7 +112,14 @@ jobs:
                 jq '{isRunning, lastRunSucceeded, lastCompletedAt, lastError}' <<< "$STATUS_JSON"
                 exit 1
               fi
-              echo "$CURRENT_TIME (${ELAPSED_MIN}m elapsed) - Scrape job finished successfully!"
+              SAVED_AT=$(jq -r '.lastScrapedAt // ""' <<< "$STATUS_JSON")
+              COMPLETED_AT=$(jq -r '.lastCompletedAt // ""' <<< "$STATUS_JSON")
+              if [ -z "$SAVED_AT" ] || [ "$SAVED_AT" == "$BASELINE_SAVED_AT" ] \
+                || [ -z "$COMPLETED_AT" ] || [ "$COMPLETED_AT" == "$BASELINE_COMPLETED_AT" ]; then
+                echo "Error: No new completed database save was confirmed; refusing to report an old or debug-only run as successful."
+                exit 1
+              fi
+              echo "$CURRENT_TIME (${ELAPSED_MIN}m elapsed) - Scrape finished and a new database batch was confirmed at $SAVED_AT."
               break
             elif [ "$IS_RUNNING" == "true" ]; then
               echo "$CURRENT_TIME (${ELAPSED_MIN}m elapsed) - Scrape in progress. Keeping Render alive..."
