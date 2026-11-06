@@ -443,42 +443,26 @@ as incomplete. Configure these defaults with `OlxScrape__MaxConcurrentBuckets`,
 `OlxScrape__RetryDelayMilliseconds` (default 2000), and
 `OlxScrape__PageDelayMilliseconds` (default 250).
 
-Successfully downloaded pages and other sources are saved even if one source
-fails. `/api/RealEstate/scrapeStatus` exposes `lastRunSucceeded`,
-`lastCompletedAt` and a safe source/city summary in `lastError`; idle alone does
-not mean success. Job outcomes are held in memory and become unknown after an
-API restart; `lastScrapedAt` still comes from saved database rows. The weekly
-workflow requires explicit success and fails after 225 minutes of monitoring.
-Deploy the API before running this updated workflow. OLX currently has city ids
-configured only for Krakow and Katowice; other cities intentionally skip OLX.
+The weekly GitHub Actions workflow runs on Sundays at 11:00 Warsaw time. It
+posts its run ID to `/api/RealEstate/weeklyScrapes/{runId}` every 45 seconds.
+The API saves each city's offers and source errors together in MySQL. After
+an API restart, the next poll starts the first city without a saved result.
+A city with incomplete sources keeps any usable offers. The workflow reports
+those failures after processing the remaining cities.
 
-Run downloader, persistence and job-status regression tests with:
+**Rollout order.** Apply the `AddWeeklyScrapeCities` migration (section 6.3),
+set the API's `ScrapeApiKey` to match the GitHub `SCRAPE_API_KEY` secret,
+and deploy the API before enabling the updated workflow. Set `RENDER_URL`
+in the workflow to the deployed API address if the host changes.
 
-```powershell
-dotnet test AF_mobile_web_api.Tests/AF_mobile_web_api.Tests.csproj
-```
+After a timeout or interruption, use **Re-run jobs** on the same Actions run
+to resume. The 225-minute monitoring limit starts again on each attempt.
+A new manual dispatch gets a new run ID and scrapes every city again. Use
+that option for a fresh download after a reported source failure.
 
-
-`.github/workflows/call-api.yml` runs every Sunday 11:00 UTC and curls
-the old Render URL without an API key. After migrating, update it — or move the
-schedule onto the VPS, which is more reliable and keeps the key off GitHub:
-
-```bash
-# /etc/cron.d/realestate-scrape  — Sundays 11:00 UTC
-0 11 * * 0 realestate curl -fsS -m 3600 -H "X-Api-Key: YOUR_KEY" \
-  https://YOUR.DOMAIN.HERE/api/RealEstate/getdataForManyCities >> /var/log/realestate-scrape.log 2>&1
-```
-
-If you keep it in GitHub Actions, store the key as a repository secret and send
-it as a header — never inline it in the workflow file:
-
-```yaml
-run: curl -fsS -m 3600 -H "X-Api-Key: ${{ secrets.SCRAPE_API_KEY }}" \
-       https://YOUR.DOMAIN.HERE/api/RealEstate/getdataForManyCities
-```
-
-A scrape run is long. The nginx vhost gives the scrape endpoints a 1-hour
-`proxy_read_timeout` for exactly this reason.
+The manual scrape endpoints also expose their current process's result at
+`/api/RealEstate/scrapeStatus`. OLX has city IDs configured for Krakow and
+Katowice. The other cities use the remaining sources.
 
 ---
 

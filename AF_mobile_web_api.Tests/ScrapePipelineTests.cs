@@ -1,9 +1,11 @@
 using AF_mobile_web_api.Domain;
+using AF_mobile_web_api.Controllers;
 using AF_mobile_web_api.DTO.Enums;
 using AF_mobile_web_api.Repositories.Interfaces;
 using AF_mobile_web_api.Services;
 using AF_mobile_web_api.Services.Interfaces;
 using ApplicationDatabase.Models;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -109,6 +111,83 @@ public class ScrapePipelineTests
             Assert.False(cache.TryGetValue(MapPointsPayloadProvider.CacheKey(area), out _));
             Assert.False(cache.TryGetValue(MapPointsPayloadProvider.CacheKey(area, compact: true), out _));
         }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task WeeklyRunResumesAcrossRunnerRestartsAndKeepsSourceFailures(bool partial)
+    {
+        const long runId = 41326903210;
+        var saved = new Dictionary<string, WeeklyScrapeCity>();
+        var repository = new Mock<IPropertyDataRepository>(MockBehavior.Strict);
+        repository.Setup(r => r.GetWeeklyCitiesAsync(runId)).ReturnsAsync(() => saved.Values.ToList());
+        repository.Setup(r => r.SaveWeeklyCityAsync(It.IsAny<List<PropertyData>>(), It.IsAny<WeeklyScrapeCity>()))
+            .Callback<List<PropertyData>, WeeklyScrapeCity>((rows, result) =>
+            {
+                Assert.Equal(runId, result.RunId);
+                Assert.NotEmpty(rows);
+                Assert.All(rows, p => Assert.Equal(result.City, p.City));
+                saved.Add(result.City, result);
+            }).Returns(Task.CompletedTask);
+
+        var data = new MarketplaceSearch { Data = new() { Offer("listing") } };
+        var olx = new Mock<IOLXAPIService>();
+        olx.Setup(s => s.GetOLXResponse(It.IsAny<CityEnum>())).ReturnsAsync(data);
+        if (partial) olx.Setup(s => s.GetOLXResponse(CityEnum.Krakow)).ThrowsAsync(new Exception("private detail"));
+        var morizon = new Mock<IMorizonApiService>();
+        morizon.Setup(s => s.GetPropertyListingDataAsync(It.IsAny<CityEnum>())).ReturnsAsync(data);
+        var nieruchomosci = new Mock<INieruchomosciOnlineService>();
+        nieruchomosci.Setup(s => s.GetAllPagesAsync(It.IsAny<CityEnum>())).ReturnsAsync(data);
+        using var memory = new MemoryCache(new MemoryCacheOptions());
+        using var history = new PropertyHistoryCache();
+        var service = new RealEstateServices(olx.Object, morizon.Object, nieruchomosci.Object, repository.Object,
+            new ReadCache(memory), Mock.Of<IOfferSnapshotCache>(), history, NullLogger<RealEstateServices>.Instance);
+        using var services = new ServiceCollection().AddSingleton<IRealEstateServices>(service).BuildServiceProvider();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var cities = Enum.GetValues<CityEnum>();
+        for (var i = 0; i <= cities.Length; i++)
+        {
+            // Every poll hits a fresh runner, as if Render restarted after every city.
+            var runner = new ScrapeJobRunner(services.GetRequiredService<IServiceScopeFactory>(), NullLogger<ScrapeJobRunner>.Instance);
+            var controller = new RealEstateController(service, null!, null!, runner, null!, NullLogger<RealEstateController>.Instance);
+            var result = await controller.AdvanceWeeklyScrape(runId, repository.Object);
+            if (i == cities.Length)
+            {
+                if (partial) Assert.IsType<UnprocessableEntityObjectResult>(result);
+                else Assert.IsType<OkObjectResult>(result);
+                break;
+            }
+            Assert.IsType<AcceptedResult>(result);
+            while (runner.IsRunning) await Task.Delay(5, timeout.Token);
+            Assert.True(saved.ContainsKey(cities[i].ToString()));
+        }
+        Assert.Equal(partial ? "OLX (Krakow): download incomplete." : null, saved["Krakow"].Error);
+        await service.ScrapeWeeklyCityAsync(runId, CityEnum.Krakow);
+        olx.Verify(s => s.GetOLXResponse(CityEnum.Krakow), Times.Once);
+    }
+
+    [Fact]
+    public async Task WeeklyRunRetriesUncommittedCityOnNewAttempt()
+    {
+        const long runId = 52;
+        var saved = new List<WeeklyScrapeCity> { new() { RunId = runId, City = "Krakow" } };
+        var repository = new Mock<IPropertyDataRepository>();
+        repository.Setup(r => r.GetWeeklyCitiesAsync(runId)).ReturnsAsync(saved);
+        var scrape = new Mock<IRealEstateServices>();
+        scrape.SetupSequence(s => s.ScrapeWeeklyCityAsync(runId, CityEnum.Katowice))
+            .ThrowsAsync(new IOException("write failed")).Returns(Task.CompletedTask);
+        using var services = new ServiceCollection().AddSingleton(scrape.Object).BuildServiceProvider();
+        var runner = new ScrapeJobRunner(services.GetRequiredService<IServiceScopeFactory>(), NullLogger<ScrapeJobRunner>.Instance);
+        var controller = new RealEstateController(scrape.Object, null!, null!, runner, null!, NullLogger<RealEstateController>.Instance);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        Assert.IsType<AcceptedResult>(await controller.AdvanceWeeklyScrape(runId, repository.Object));
+        while (runner.IsRunning) await Task.Delay(5, timeout.Token);
+        Assert.IsType<ConflictObjectResult>(await controller.AdvanceWeeklyScrape(runId, repository.Object));
+        Assert.IsType<AcceptedResult>(await controller.AdvanceWeeklyScrape(runId, repository.Object, attempt: 2));
+        while (runner.IsRunning) await Task.Delay(5, timeout.Token);
+        scrape.Verify(s => s.ScrapeWeeklyCityAsync(runId, CityEnum.Katowice), Times.Exactly(2));
+        scrape.VerifyNoOtherCalls();
     }
 
     [Theory]

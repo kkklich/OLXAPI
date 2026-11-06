@@ -63,6 +63,17 @@ namespace AF_mobile_web_api.Repositories
                 .ToListAsync();
         }
 
+        public Task<List<WeeklyScrapeCity>> GetWeeklyCitiesAsync(long runId) =>
+            _dbContext.WeeklyScrapeCities.AsNoTracking().Where(row => row.RunId == runId).ToListAsync();
+
+        public Task SaveWeeklyCityAsync(List<PropertyData> properties, WeeklyScrapeCity result)
+        {
+            // One SaveChanges transaction commits the offers and the unique run/city key.
+            // Even workers on overlapping instances cannot commit a second batch.
+            _dbContext.WeeklyScrapeCities.Add(result);
+            return SaveMarketplaceDataAsync(properties);
+        }
+
         public async Task SaveMarketplaceDataAsync(List<PropertyData> properties)
         {
             try

@@ -7,6 +7,10 @@ on:
       timezone: 'Europe/Warsaw'
   workflow_dispatch: # Allows manual run
 
+concurrency:
+  group: weekly-api-scrape
+  cancel-in-progress: false
+
 jobs:
   call-api:
     runs-on: ubuntu-latest
@@ -46,69 +50,43 @@ jobs:
             sleep 10
           done
 
-          echo ""
-          echo "============================================================"
-          echo "Step 2: Triggering scrape job..."
-          echo "============================================================"
-          INIT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 \
-            -H "X-Api-Key: ${SCRAPE_API_KEY}" \
-            -X GET "${RENDER_URL}/api/RealEstate/getdataForManyCities" || echo "000")
-
-          echo "Trigger response: HTTP $INIT_STATUS"
-          if [ "$INIT_STATUS" == "202" ]; then
-            echo "Scrape successfully started."
-          elif [ "$INIT_STATUS" == "409" ]; then
-            echo "A scrape is already in progress, monitoring existing run."
-          elif [ "$INIT_STATUS" == "401" ]; then
-            echo "Error: HTTP 401 Unauthorized. Please verify SCRAPE_API_KEY secret in GitHub repository settings."
-            exit 1
-          else
-            echo "Error: Unexpected trigger status HTTP $INIT_STATUS"
-            exit 1
-          fi
-
-          echo ""
-          echo "============================================================"
-          echo "Step 3: Keeping Render alive and waiting for completion..."
-          echo "============================================================"
-          POLL_START=$(date +%s)
-          # Give background job time to initialize
-          sleep 30
-
-          while true; do
-            CURRENT_TIME=$(date -u +'%T')
-            ELAPSED_MIN=$(( ($(date +%s) - POLL_START) / 60 ))
-
-            if [ "$ELAPSED_MIN" -ge 225 ]; then
-              echo "Error: Scrape did not complete within 225 minutes."
-              exit 1
+          # GitHub keeps the same RUN_ID when a failed workflow is rerun.
+          # POST starts the first unfinished city or reports the durable final outcome.
+          deadline=$((SECONDS + 225 * 60))
+          response=$(mktemp)
+          trap 'rm -f "$response"' EXIT
+          transient_errors=0
+          while (( SECONDS < deadline )); do
+            if ! code=$(curl --silent --show-error --max-time 30 --output "$response" \
+              --write-out '%{http_code}' -X POST -H "X-Api-Key: ${SCRAPE_API_KEY}" \
+              "${RENDER_URL}/api/RealEstate/weeklyScrapes/${GITHUB_RUN_ID}?attempt=${GITHUB_RUN_ATTEMPT}"); then
+              code=000
             fi
-            STATUS_JSON=$(curl --fail -s --max-time 20 "${RENDER_URL}/api/RealEstate/scrapeStatus" || echo '{}')
-            IS_RUNNING=$(jq -r 'if (.isRunning | type) == "boolean" then .isRunning else "unknown" end' <<< "$STATUS_JSON" 2>/dev/null || echo unknown)
-
-            if [ "$IS_RUNNING" == "false" ]; then
-              SUCCEEDED=$(jq -r 'if (.lastRunSucceeded | type) == "boolean" then .lastRunSucceeded else "unknown" end' <<< "$STATUS_JSON")
-              if [ "$SUCCEEDED" != "true" ]; then
-                echo "Error: Scrape stopped without a successful result. Status:"
-                jq '{isRunning, lastRunSucceeded, lastCompletedAt, lastError}' <<< "$STATUS_JSON"
-                exit 1
-              fi
-              echo "$CURRENT_TIME (${ELAPSED_MIN}m elapsed) - Scrape job finished successfully!"
-              break
-            elif [ "$IS_RUNNING" == "true" ]; then
-              echo "$CURRENT_TIME (${ELAPSED_MIN}m elapsed) - Scrape in progress. Keeping Render alive..."
-            else
-              # Keep the service awake through temporary status failures.
-              HEALTH_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "${RENDER_URL}/api/Health" || echo "000")
-              echo "$CURRENT_TIME (${ELAPSED_MIN}m elapsed) - Heartbeat ping: HTTP $HEALTH_CODE. Keeping Render alive..."
-
-            fi
-
-            # Ping every 45 seconds (Render free tier sleeps after 15 minutes of inactivity)
+            case "$code" in
+              200)
+                jq -e '.completedCities > 0 and (.completedCities | type == "number")' "$response" >/dev/null
+                echo "Weekly scrape completed for all cities."
+                exit 0 ;;
+              202)
+                transient_errors=0
+                jq -ce '{city, started, completedCities}' "$response" ;;
+              409)
+                jq -c '{city, error}' "$response"
+                echo "City scrape stopped before saving its result. Rerun this workflow to resume."
+                exit 1 ;;
+              422)
+                jq -c '.errors' "$response"
+                echo "One or more sources returned incomplete data."
+                exit 1 ;;
+              000|408|429|5??)
+                transient_errors=$((transient_errors + 1))
+                echo "Weekly scrape status unavailable (HTTP $code, attempt $transient_errors/10)."
+                if (( transient_errors >= 10 )); then exit 1; fi ;;
+              *)
+                echo "Weekly scrape request failed (HTTP $code)."
+                exit 1 ;;
+            esac
             sleep 45
           done
-
-          echo ""
-          echo "============================================================"
-          echo "Scrape cycle completed successfully!"
-          echo "============================================================"
+          echo "Weekly scrape did not finish within 225 minutes. Rerun this workflow to resume."
+          exit 1
