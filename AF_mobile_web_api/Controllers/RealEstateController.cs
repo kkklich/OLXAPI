@@ -6,6 +6,8 @@ using Microsoft.Net.Http.Headers;
 using AF_mobile_web_api.Filters;
 using AF_mobile_web_api.Services.Interfaces;
 using AF_mobile_web_api.DTO;
+using AF_mobile_web_api.Services;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace AF_mobile_web_api.Controllers
 {
@@ -263,9 +265,10 @@ namespace AF_mobile_web_api.Controllers
         }
 
         [HttpGet("propertyHistory/{city}")]
-        public async Task<IActionResult> GetPropertyHistory(string city, [FromQuery] string url)
+        [EnableRateLimiting(PropertyHistoryRateLimiting.PolicyName)]
+        public async Task<IActionResult> GetPropertyHistory(string city, [FromQuery] string url, CancellationToken cancellationToken = default)
         {
-            var history = await _list.GetHistoryAsync(city, url);
+            var history = await _list.GetHistoryAsync(city, url, cancellationToken);
             return history is null ? NotFound() : Ok(history);
         }
     }

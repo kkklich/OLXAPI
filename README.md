@@ -42,6 +42,8 @@ dotnet ef database update --project ApplicationDatabase --startup-project AF_mob
 | `OlxScrape:InitialBucketSize` | initial OLX price-band width in PLN; dense bands split automatically | `1000000` |
 | `OlxScrape:MinimumBucketSize` | stop splitting dense OLX bands below this width; report remaining truncation | `5000` |
 | `OlxScrape:MaxConcurrentBuckets` | maximum concurrent OLX price-band workers | `3` |
+| `PropertyHistory:PermitLimit` | history requests allowed per window, shared by all visitors to one API instance | `120` |
+| `PropertyHistory:WindowSeconds` | fixed history rate-limit window in seconds | `60` |
 | `PORT` (env) | listen port | `5016` |
 
 In production, supply all of these as environment variables
@@ -64,9 +66,10 @@ The database host must be the IP: `krzysztofklich.pl` has no DNS record any more
 and `AllowedOrigins__Frontend` is scheme + host only — a path or trailing slash
 never matches an `Origin` header.
 
-> ⚠️ `appsettings.Development.json` currently holds a **real database password**
-> and it is in this repository's git history. Rotate it and purge the history
-> before treating this repo as public.
+> The exposed passwords were removed from local and published branch history on
+> 2026-10-30. Password rotation is still outstanding, as is GitHub Support cleanup
+> of old pull-request references and cached views. History cleanup does not revoke
+> credentials; other existing clones must be cleaned or replaced before pushing.
 
 ## API
 
@@ -87,6 +90,21 @@ triggers, which require an `X-Api-Key` header once `ScrapeApiKey` is set.
 | `getGroupedStatistics/{groupBy}/{city}` | bar-chart data grouped by any field |
 | `filterByParameter/{groupBy}/{city}/{parameter}` | one series out of the above |
 | `getRealEstate/{city}`, `getUniqueOffers`, `RealEstateStats`, `RealEstateGropuBy` | older endpoints, kept for compatibility |
+
+Price histories (including missing offers) are cached by exact `(city, url)` until
+the next successful city save, subject to eviction from a separate cache with a
+16 MiB estimated-size budget. Concurrent requests for the same key share a build;
+an in-flight lookup cannot restore stale cache entries after a scrape. Aborted
+history requests cancel their database queries. History matching and response
+fields are unchanged.
+
+The history endpoint accepts 120 requests per 60-second fixed window by default,
+shared by every visitor to one API instance, including cache hits. Excess requests
+receive `429 Too Many Requests` with a `Retry-After` header and are not queued.
+The two `PropertyHistory` settings above must be positive; environment variables
+are `PropertyHistory__PermitLimit` and `PropertyHistory__WindowSeconds`. This is
+an instance-wide database protection budget, not a per-user quota; it does not
+depend on forwarded client-IP headers. Other endpoints are unaffected.
 
 `{city}` is a `CityEnum` name — `Krakow`, `Katowice`, `Chorzow`, `Tychy`,
 `Mikolow`, `Myslowice`, `Sosnowiec` — or an area of several cities: `Silesia`

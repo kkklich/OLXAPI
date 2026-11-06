@@ -116,7 +116,8 @@ public class PerformanceTests
         snapshot.Setup(x => x.GetAsync()).ReturnsAsync(new[] { new OfferSnapshot
             { Id = Guid.NewGuid(), Url = "/flat", Title = "Ładne mieszkanie" } });
         var repository = new Mock<IPropertyDataRepository>(MockBehavior.Strict);
-        var service = new PropertyListService(repository.Object, Mock.Of<IPropertyComparer>(), snapshot.Object);
+        using var historyCache = new PropertyHistoryCache();
+        var service = new PropertyListService(repository.Object, Mock.Of<IPropertyComparer>(), snapshot.Object, historyCache);
         var page = await service.GetPagedAsync(new PropertyQueryParams());
         Assert.Equal("Ładne mieszkanie", Assert.Single(page.Items).Title);
         Assert.Equal("/flat", page.Items[0].Url);

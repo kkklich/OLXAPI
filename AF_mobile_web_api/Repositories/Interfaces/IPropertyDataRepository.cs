@@ -11,8 +11,8 @@ namespace AF_mobile_web_api.Repositories.Interfaces
         Task<List<TimelineGroup>> GetTimelineByCitiesAsync(IReadOnlyCollection<string> cities);
         IAsyncEnumerable<LatestOfferRow> StreamLatestOffersAsync();
         Task<List<OfferPageDetail>> GetPageDetailsAsync(IReadOnlyList<Guid> ids);
-        Task<List<PropertyData>> GetHistoryCandidatesAsync(string city, HistoryCandidateFilter filter);
-        Task<PropertyData?> GetLatestByUrlAsync(string city, string url);
+        Task<List<PropertyData>> GetHistoryCandidatesAsync(string city, HistoryCandidateFilter filter, CancellationToken cancellationToken = default);
+        Task<PropertyData?> GetLatestByUrlAsync(string city, string url, CancellationToken cancellationToken = default);
         Task<List<PriceDropDTO>> GetPriceDropsAsync(string city, int limit);
         Task<DateTime?> GetLatestScrapeTimeAsync();
     }
