@@ -95,7 +95,18 @@ namespace AF_mobile_web_api.Services
             return new MarketplaceSearch();
         }
 
-        public async Task<MarketplaceSearch> LoadDataMarkeplacesAsync(CityEnum city = CityEnum.Krakow)
+        public Task<MarketplaceSearch> LoadDataMarkeplacesAsync(CityEnum city = CityEnum.Krakow) =>
+            ScrapeCityAsync(city, null);
+
+        public async Task ScrapeWeeklyCityAsync(long runId, CityEnum city)
+        {
+            // The previous worker may have committed between the poll and acquiring the runner.
+            var saved = await _propertyDataRepository.GetWeeklyCitiesAsync(runId);
+            if (saved.Any(row => row.City == city.ToString())) return;
+            await ScrapeCityAsync(city, runId);
+        }
+
+        private async Task<MarketplaceSearch> ScrapeCityAsync(CityEnum city, long? runId)
         {
             // Start all three scrapes concurrently, but await each one separately so a single
             // failing source does not discard the results of the healthy ones.
@@ -116,12 +127,20 @@ namespace AF_mobile_web_api.Services
             };
             var failures = new[] { olxData.Error, morizonData.Error, nieruchomosciData.Error }
                 .OfType<Exception>().ToList();
+            var checkpoint = runId.HasValue ? new WeeklyScrapeCity
+            {
+                RunId = runId.Value,
+                City = city.ToString(),
+                Error = failures.Count > 0 ? string.Join(" ", failures.Select(e => e.Message)) : null
+            } : null;
 
             if (combinedData.Data.Count == 0)
             {
                 // Saving an empty batch would become the "latest" snapshot downstream
                 // (GetLatestByCityAsync) and wipe the dashboard until the next scrape.
                 _logger.LogError("All marketplace sources returned no data for {City}; skipping save", city);
+                if (checkpoint != null)
+                    await _propertyDataRepository.SaveWeeklyCityAsync(new List<PropertyData>(), checkpoint);
                 if (failures.Count > 0) throw new AggregateException(failures);
                 return combinedData;
             }
@@ -153,7 +172,10 @@ namespace AF_mobile_web_api.Services
                 property.AddedRecordTime = scrapeTime;
             }
 
-            await _propertyDataRepository.SaveMarketplaceDataAsync(propertiesList);
+            if (checkpoint == null)
+                await _propertyDataRepository.SaveMarketplaceDataAsync(propertiesList);
+            else
+                await _propertyDataRepository.SaveWeeklyCityAsync(propertiesList, checkpoint);
             _historyCache.Invalidate();
 
             // StatisticServices caches these entries for 120 minutes, per city and per area of

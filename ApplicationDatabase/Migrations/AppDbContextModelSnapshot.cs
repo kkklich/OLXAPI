@@ -95,6 +95,23 @@ namespace ApplicationDatabase.Migrations
 
                     b.ToTable("PropertyData");
                 });
+
+            modelBuilder.Entity("ApplicationDatabase.Models.WeeklyScrapeCity", b =>
+                {
+                    b.Property<long>("RunId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("City")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("longtext");
+
+                    b.HasKey("RunId", "City");
+
+                    b.ToTable("WeeklyScrapeCities");
+                });
 #pragma warning restore 612, 618
         }
     }
