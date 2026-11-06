@@ -19,15 +19,9 @@ jobs:
     steps:
       - name: Wake up Render and run weekly scrape
         env:
-          SCRAPE_API_KEY: ${{ secrets.SCRAPE_API_KEY }}
           RENDER_URL: "https://olxapi-jwcz.onrender.com"
         run: |
           set -euo pipefail
-
-          if [ -z "${SCRAPE_API_KEY:-}" ]; then
-            echo "Error: Set the SCRAPE_API_KEY repository secret before running the weekly scrape."
-            exit 1
-          fi
 
           echo "============================================================"
           echo "Step 1: Waking up Render service (cold start)..."
@@ -58,7 +52,7 @@ jobs:
           transient_errors=0
           while (( SECONDS < deadline )); do
             if ! code=$(curl --silent --show-error --max-time 30 --output "$response" \
-              --write-out '%{http_code}' -X POST -H "X-Api-Key: ${SCRAPE_API_KEY}" \
+              --write-out '%{http_code}' -X POST \
               "${RENDER_URL}/api/RealEstate/weeklyScrapes/${GITHUB_RUN_ID}?attempt=${GITHUB_RUN_ATTEMPT}"); then
               code=000
             fi

@@ -152,8 +152,8 @@ Generate a key and set it in `/etc/realestate/api.env`:
 openssl rand -hex 32
 ```
 
-Callers then need the header `X-Api-Key: <that value>` — including the GitHub
-Actions cron job (see [§9](#9-scheduled-scraping)).
+Callers of these four endpoints then need the header `X-Api-Key: <that value>`.
+The weekly workflow uses a separate public endpoint (see [§9](#9-scheduled-scraping)).
 
 ### 3.4 The MapTiler key is public
 
@@ -450,8 +450,7 @@ an API restart, the next poll starts the first city without a saved result.
 A city with incomplete sources keeps any usable offers. The workflow reports
 those failures after processing the remaining cities.
 
-**Rollout order.** Apply the `AddWeeklyScrapeCities` migration (section 6.3),
-set the API's `ScrapeApiKey` to match the GitHub `SCRAPE_API_KEY` secret,
+**Rollout order.** Apply the `AddWeeklyScrapeCities` migration (section 6.3)
 and deploy the API before enabling the updated workflow. Set `RENDER_URL`
 in the workflow to the deployed API address if the host changes.
 
