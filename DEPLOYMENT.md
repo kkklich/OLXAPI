@@ -443,19 +443,17 @@ as incomplete. Configure these defaults with `OlxScrape__MaxConcurrentBuckets`,
 `OlxScrape__RetryDelayMilliseconds` (default 2000), and
 `OlxScrape__PageDelayMilliseconds` (default 250).
 
-The weekly GitHub Actions workflow runs on Sundays at 11:00 Warsaw time. It
-posts its run ID to `/api/RealEstate/weeklyScrapes/{runId}` every 45 seconds.
-The API saves each city's offers and source errors together in MySQL. After
-an API restart, the next poll starts the first city without a saved result.
-A city with incomplete sources keeps any usable offers. The workflow reports
-those failures after processing the remaining cities.
+The weekly workflow on `render` runs the scraper on GitHub Actions and connects
+to MySQL using the existing `CONNECTIONSTRINGS__CONNECTIONSTRING` secret. The
+default branch can call this workflow on Sundays at 11:00 Warsaw time.
+The scraper saves each city's offers and source errors together. A city with
+incomplete sources keeps usable offers, and the workflow reports failures after
+processing the remaining cities.
 
-**Rollout order.** Apply the `AddWeeklyScrapeCities` migration (section 6.3)
-and deploy the API before enabling the updated workflow. Set `RENDER_URL`
-in the workflow to the deployed API address if the host changes.
+Apply the `AddWeeklyScrapeCities` migration (section 6.3) before enabling the workflow.
 
 After a timeout or interruption, use **Re-run jobs** on the same Actions run
-to resume. The 225-minute monitoring limit starts again on each attempt.
+to resume from the first city without a saved result.
 A new manual dispatch gets a new run ID and scrapes every city again. Use
 that option for a fresh download after a reported source failure.
 

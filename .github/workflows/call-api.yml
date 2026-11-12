@@ -1,11 +1,14 @@
 name: Weekly API Call
 
 on:
-  schedule:
-    # Every Sunday at 11:00 Warsaw time (automatically adjusts for DST)
-    - cron: '0 11 * * 0'
-      timezone: 'Europe/Warsaw'
-  workflow_dispatch: # Allows manual run
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      CONNECTIONSTRINGS__CONNECTIONSTRING:
+        required: true
+
+permissions:
+  contents: read
 
 concurrency:
   group: weekly-api-scrape
@@ -15,72 +18,26 @@ jobs:
   call-api:
     runs-on: ubuntu-latest
     timeout-minutes: 240
-
     steps:
-      - name: Wake up Render and run weekly scrape
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name == 'render' && github.sha || 'render' }}
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build the scraper
+        run: dotnet build AF_mobile_web_api/AF_mobile_web_api.csproj --configuration Release
+      - name: Download and save offers by city
         env:
-          RENDER_URL: "https://olxapi-jwcz.onrender.com"
+          ConnectionStrings__ConnectionString: ${{ secrets.CONNECTIONSTRINGS__CONNECTIONSTRING }}
+          Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: Warning
+          Logging__LogLevel__System.Net.Http.HttpClient: Warning
         run: |
           set -euo pipefail
-
-          echo "============================================================"
-          echo "Step 1: Waking up Render service (cold start)..."
-          echo "============================================================"
-          WAKE_START=$(date +%s)
-          while true; do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${RENDER_URL}/api/Health" || echo "000")
-            echo "$(date -u +'%T') - Ping /api/Health: HTTP $HTTP_CODE"
-
-            if [ "$HTTP_CODE" -eq 200 ]; then
-              echo "Render instance is awake and healthy!"
-              break
-            fi
-
-            ELAPSED=$(( $(date +%s) - WAKE_START ))
-            if [ "$ELAPSED" -ge 300 ]; then
-              echo "Error: Server failed to wake up within 5 minutes."
-              exit 1
-            fi
-            sleep 10
-          done
-
-          # GitHub keeps the same RUN_ID when a failed workflow is rerun.
-          # POST starts the first unfinished city or reports the durable final outcome.
-          deadline=$((SECONDS + 225 * 60))
-          response=$(mktemp)
-          trap 'rm -f "$response"' EXIT
-          transient_errors=0
-          while (( SECONDS < deadline )); do
-            if ! code=$(curl --silent --show-error --max-time 30 --output "$response" \
-              --write-out '%{http_code}' -X POST \
-              "${RENDER_URL}/api/RealEstate/weeklyScrapes/${GITHUB_RUN_ID}?attempt=${GITHUB_RUN_ATTEMPT}"); then
-              code=000
-            fi
-            case "$code" in
-              200)
-                jq -e '.completedCities > 0 and (.completedCities | type == "number")' "$response" >/dev/null
-                echo "Weekly scrape completed for all cities."
-                exit 0 ;;
-              202)
-                transient_errors=0
-                jq -ce '{city, started, completedCities}' "$response" ;;
-              409)
-                jq -c '{city, error}' "$response"
-                echo "City scrape stopped before saving its result. Rerun this workflow to resume."
-                exit 1 ;;
-              422)
-                jq -c '.errors' "$response"
-                echo "One or more sources returned incomplete data."
-                exit 1 ;;
-              000|408|429|5??)
-                transient_errors=$((transient_errors + 1))
-                echo "Weekly scrape status unavailable (HTTP $code, attempt $transient_errors/10)."
-                if (( transient_errors >= 10 )); then exit 1; fi ;;
-              *)
-                echo "Weekly scrape request failed (HTTP $code)."
-                exit 1 ;;
-            esac
-            sleep 45
-          done
-          echo "Weekly scrape did not finish within 225 minutes. Rerun this workflow to resume."
-          exit 1
+          if [[ -z "${ConnectionStrings__ConnectionString:-}" ]]; then
+            echo "The production database connection secret is missing."
+            exit 1
+          fi
+          cd AF_mobile_web_api
+          dotnet bin/Release/net10.0/AF_mobile_web_api.dll --weekly-scrape "$GITHUB_RUN_ID"
