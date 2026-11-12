@@ -6,6 +6,6 @@ namespace AF_mobile_web_api.Services.Interfaces
     public interface IPropertyListService
     {
         Task<PagedResultDTO<PropertyListItemDTO>> GetPagedAsync(PropertyQueryParams query);
-        Task<PropertyHistoryDTO?> GetHistoryAsync(string city, string url);
+        Task<PropertyHistoryDTO?> GetHistoryAsync(string city, string url, CancellationToken cancellationToken = default);
     }
 }

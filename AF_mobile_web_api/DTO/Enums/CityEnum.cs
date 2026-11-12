@@ -60,13 +60,17 @@
             return TryParseName(city, out var value) ? value.ToDisplayName() : city ?? string.Empty;
         }
 
-        // OLX's city_id. A city missing here is not scraped from OLX at all (see
-        // OLXAPIService.GetOLXResponse) - the ids of the Silesian cities other than Katowice
-        // are still to be looked up.
+        // Verified OLX city_id values shared by live previews and the weekly collector.
+        // An unknown enum value must never fall back to an unbounded regional search.
         private static readonly Dictionary<CityEnum, int> cityOLXValues = new()
         {
             { CityEnum.Krakow, 8959 },
-            { CityEnum.Katowice, 7691 }
+            { CityEnum.Katowice, 7691 },
+            { CityEnum.Chorzow, 22611 },
+            { CityEnum.Tychy, 17705 },
+            { CityEnum.Mikolow, 11631 },
+            { CityEnum.Myslowice, 50917 },
+            { CityEnum.Sosnowiec, 16027 }
         };
 
         public static int ToEncodedOLXString(this CityEnum city)

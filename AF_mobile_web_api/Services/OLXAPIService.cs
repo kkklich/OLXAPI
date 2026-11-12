@@ -33,7 +33,7 @@ namespace AF_mobile_web_api.Services
         {
             var cityId = city.ToEncodedOLXString();
             if (cityId == 0)
-                throw new ArgumentException("Podgląd OLX obsługuje miasta Krakow i Katowice.", nameof(city));
+                throw new ArgumentException("Nieobsługiwane miasto OLX.", nameof(city));
             if (priceFrom < 0 || priceTo < priceFrom)
                 throw new ArgumentException("Ceny muszą być nieujemne, a priceTo nie może być mniejsze niż priceFrom.");
             if (limit is < 1 or > 40)

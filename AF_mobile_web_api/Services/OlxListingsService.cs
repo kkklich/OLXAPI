@@ -11,23 +11,11 @@ namespace AF_mobile_web_api.Services;
 /// <summary>A bounded, cancellable live OLX search, including syndicated Otodom listings.</summary>
 public sealed class OlxListingsService(IHttpClientFactory httpClientFactory) : IOlxListingsService
 {
-    // Verified against each city's public OLX search page on 2026-11-05.
-    // Kept separate from background scraping, whose persisted offer identities are unchanged.
-    private static readonly IReadOnlyDictionary<CityEnum, int> CityIds = new Dictionary<CityEnum, int>
-    {
-        [CityEnum.Krakow] = 8959,
-        [CityEnum.Katowice] = 7691,
-        [CityEnum.Chorzow] = 22611,
-        [CityEnum.Tychy] = 17705,
-        [CityEnum.Mikolow] = 11631,
-        [CityEnum.Myslowice] = 50917,
-        [CityEnum.Sosnowiec] = 16027
-    };
-
     public async Task<MarketplaceCityPage> GetPageAsync(CityEnum city, int priceFrom, int priceTo,
         int page, int pageSize, CancellationToken cancellationToken = default)
     {
-        if (!CityIds.TryGetValue(city, out var cityId))
+        var cityId = city.ToEncodedOLXString();
+        if (cityId == 0)
             throw new ArgumentOutOfRangeException(nameof(city));
         if (priceFrom < 0 || priceTo < priceFrom)
             throw new ArgumentException("Prices must be nonnegative and priceTo must be at least priceFrom.");

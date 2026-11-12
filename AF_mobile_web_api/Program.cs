@@ -1,4 +1,3 @@
-using AF_mobile_web_api.Mappings;
 using AF_mobile_web_api.Middleware;
 using AF_mobile_web_api.Repositories;
 using AF_mobile_web_api.Repositories.Interfaces;
@@ -11,7 +10,16 @@ using System;
 using System.IO.Compression;
 using System.Reflection;
 
-var builder = WebApplication.CreateBuilder(args);
+var weeklyScrape = args.FirstOrDefault() == "--weekly-scrape";
+long runId = 0;
+if (weeklyScrape && (args.Length != 2 || !long.TryParse(args[1], out runId) || runId <= 0))
+{
+    Console.Error.WriteLine("Usage: --weekly-scrape <positive run ID>");
+    Environment.ExitCode = 2;
+    return;
+}
+
+var builder = WebApplication.CreateBuilder(weeklyScrape ? [] : args);
 
 // Get the port from environment variable (Render sets this automatically)
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5016";
@@ -30,7 +38,6 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         builder.Configuration.GetConnectionString("ConnectionString"),
         serverVersion
     ));
-builder.Services.AddAutoMapper(typeof(MappingProfile));
 
 
 builder.Services.AddHttpClient(); // Still needed for the factory!
@@ -67,6 +74,8 @@ builder.Services.AddHostedService<CacheWarmupService>();
 
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ReadCache>();
+builder.Services.AddSingleton<PropertyHistoryCache>();
+builder.Services.AddPropertyHistoryRateLimiting(builder.Configuration);
 
 builder.Services.AddResponseCompression(options =>
 {
@@ -112,11 +121,22 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+if (weeklyScrape)
+{
+    await using var host = app;
+    Environment.ExitCode = await WeeklyScrapeCommand.RunAsync(host.Services, runId);
+    return;
+}
+
 app.UseResponseCompression();
 
 app.UseMiddleware<ExceptionMiddleware>();
 
+app.UseRouting();
+
 app.UseCors("AllowSpecificOrigin");
+
+app.UseRateLimiter();
 
 app.UseAuthorization();
 

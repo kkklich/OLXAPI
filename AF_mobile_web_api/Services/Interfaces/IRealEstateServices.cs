@@ -20,6 +20,7 @@ namespace AF_mobile_web_api.Services.Interfaces
 
         Task<MarketplaceSearch> GetdataForManyCitiesAsync();
         Task<MarketplaceSearch> LoadDataMarkeplacesAsync(CityEnum city = CityEnum.Krakow);
+        Task ScrapeWeeklyCityAsync(long runId, CityEnum city);
         Task<List<SearchDataDTO>> GetUniqueOffertsAsync();
     }
 }

@@ -13,10 +13,16 @@ namespace ApplicationDatabase
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
         public DbSet<PropertyData> PropertyData { get; set; }
+        public DbSet<WeeklyScrapeCity> WeeklyScrapeCities => Set<WeeklyScrapeCity>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<WeeklyScrapeCity>(entity =>
+            {
+                entity.HasKey(row => new { row.RunId, row.City });
+                entity.Property(row => row.City).HasMaxLength(64);
+            });
 
             // Query indexes for the paged offers list (GetPagedAsync). Only non-string
             // columns are declared here: the string columns (City, Url) are longtext and

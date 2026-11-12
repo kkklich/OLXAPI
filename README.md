@@ -42,6 +42,8 @@ dotnet ef database update --project ApplicationDatabase --startup-project AF_mob
 | `OlxScrape:InitialBucketSize` | initial OLX price-band width in PLN; dense bands split automatically | `1000000` |
 | `OlxScrape:MinimumBucketSize` | stop splitting dense OLX bands below this width; report remaining truncation | `5000` |
 | `OlxScrape:MaxConcurrentBuckets` | maximum concurrent OLX price-band workers | `3` |
+| `PropertyHistory:PermitLimit` | history requests allowed per window, shared by all visitors to one API instance | `120` |
+| `PropertyHistory:WindowSeconds` | fixed history rate-limit window in seconds | `60` |
 | `PORT` (env) | listen port | `5016` |
 
 In production, supply all of these as environment variables
@@ -64,9 +66,10 @@ The database host must be the IP: `krzysztofklich.pl` has no DNS record any more
 and `AllowedOrigins__Frontend` is scheme + host only — a path or trailing slash
 never matches an `Origin` header.
 
-> ⚠️ `appsettings.Development.json` currently holds a **real database password**
-> and it is in this repository's git history. Rotate it and purge the history
-> before treating this repo as public.
+> The exposed passwords were removed from local and published branch history on
+> 2026-10-30. Password rotation is still outstanding, as is GitHub Support cleanup
+> of old pull-request references and cached views. History cleanup does not revoke
+> credentials; other existing clones must be cleaned or replaced before pushing.
 
 ## API
 
@@ -87,6 +90,21 @@ triggers, which require an `X-Api-Key` header once `ScrapeApiKey` is set.
 | `getGroupedStatistics/{groupBy}/{city}` | bar-chart data grouped by any field |
 | `filterByParameter/{groupBy}/{city}/{parameter}` | one series out of the above |
 | `getRealEstate/{city}`, `getUniqueOffers`, `RealEstateStats`, `RealEstateGropuBy` | older endpoints, kept for compatibility |
+
+Price histories (including missing offers) are cached by exact `(city, url)` until
+the next successful city save, subject to eviction from a separate cache with a
+16 MiB estimated-size budget. Concurrent requests for the same key share a build;
+an in-flight lookup cannot restore stale cache entries after a scrape. Aborted
+history requests cancel their database queries. History matching and response
+fields are unchanged.
+
+The history endpoint accepts 120 requests per 60-second fixed window by default,
+shared by every visitor to one API instance, including cache hits. Excess requests
+receive `429 Too Many Requests` with a `Retry-After` header and are not queued.
+The two `PropertyHistory` settings above must be positive; environment variables
+are `PropertyHistory__PermitLimit` and `PropertyHistory__WindowSeconds`. This is
+an instance-wide database protection budget, not a per-user quota; it does not
+depend on forwarded client-IP headers. Other endpoints are unaffected.
 
 `{city}` is a `CityEnum` name — `Krakow`, `Katowice`, `Chorzow`, `Tychy`,
 `Mikolow`, `Myslowice`, `Sosnowiec` — or an area of several cities: `Silesia`
@@ -124,7 +142,8 @@ message leaves out.
 
 Downloads **one page directly from OLX**, returns JSON in the request, and never
 calls the database or starts a background scrape. It uses the full scraper's
-HTTP downloader and field mapping. Supported cities: `Krakow`, `Katowice`.
+HTTP downloader and field mapping. Supported cities: `Krakow`, `Katowice`,
+`Chorzow`, `Tychy`, `Mikolow`, `Myslowice`, `Sosnowiec`.
 If `ScrapeApiKey` is configured, supply the `X-Api-Key` header.
 
 ```powershell
@@ -227,17 +246,28 @@ a time. Since the Silesian cities were added, a full run covers seven cities
 instead of two; the requests per city are set by price ranges, not by how many
 offers a city has, so expect it to take about three and a half times as long.
 
-OLX filters by a numeric `city_id` per city (`CityExtensions`). Only Kraków's
-and Katowice's are known so far; the other Silesian cities are scraped from
-Morizon and Nieruchomości-online only — OLX is skipped for them, with a warning
-in the log — until their ids are added.
+The weekly GitHub Actions workflow (`.github/workflows/call-api.yml`) runs on
+Sunday at 11:00 Europe/Warsaw and can also be started manually. It runs the
+collector on GitHub Actions using the production code from `render`. The
+collector downloads and **saves timestamped database snapshots** from OLX,
+Morizon and Nieruchomości-online for all seven configured cities. OLX uses
+the same verified city IDs as the live reader, follows pages, and splits
+dense price ranges.
+Persisted OLX URLs/source identifiers retain their existing format. Direct
+Otodom searches remain part of the read-only live endpoint.
+
+The workflow connects directly to MySQL with the existing
+`CONNECTIONSTRINGS__CONNECTIONSTRING` repository secret. Each city's offers
+and result commit together. Re-running an interrupted workflow resumes at the
+first city without a saved result. The collector retains offers from successful
+sources and reports incomplete sources at the end of the run.
 
 ```bash
 curl -H "X-Api-Key: $KEY" http://localhost:5016/api/RealEstate/getdataForManyCities
 ```
 
-Nothing inside the app schedules scrapes. A cron job or CI workflow has to call
-the trigger — weekly is what the data model assumes.
+The HTTP trigger is available for manual use when the API host can reach the
+listing providers. The Sunday schedule runs on GitHub Actions.
 
 ## How it works
 
@@ -254,7 +284,7 @@ Controllers/    one controller, thin — no logic
 Services/       scrapers (OLX, Morizon, N-online), statistics, scrape runner, comparer
 Repositories/   every database query
 DTO/ Domain/    wire shapes and internal shapes
-Mappings/       AutoMapper: SearchData ⇄ PropertyData
+Mappings/       SearchData ⇄ PropertyData conversion
 Filters/        the X-Api-Key gate
 Middleware/     exception → JSON error (400 for an unknown city, 500 otherwise)
 ```

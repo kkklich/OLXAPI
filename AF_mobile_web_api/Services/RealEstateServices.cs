@@ -4,7 +4,7 @@ using AF_mobile_web_api.DTO.Enums;
 using AF_mobile_web_api.Repositories.Interfaces;
 using AF_mobile_web_api.Services.Interfaces;
 using ApplicationDatabase.Models;
-using AutoMapper;
+using AF_mobile_web_api.Mappings;
 
 namespace AF_mobile_web_api.Services
 {
@@ -13,9 +13,9 @@ namespace AF_mobile_web_api.Services
         private readonly IOLXAPIService _olxApiService;
         private readonly IMorizonApiService _morizonApiService;
         private readonly INieruchomosciOnlineService _nieruchomosciOnlineService;
-        private readonly IMapper _mapper;
         private readonly IPropertyDataRepository _propertyDataRepository;
         private readonly ReadCache _cache;
+        private readonly PropertyHistoryCache _historyCache;
         private bool _multiCityScrape;
         private readonly IOfferSnapshotCache _offers;
         private readonly ILogger<RealEstateServices> _logger;
@@ -24,19 +24,19 @@ namespace AF_mobile_web_api.Services
             IOLXAPIService olxApiService,
             IMorizonApiService morizonApiService,
             INieruchomosciOnlineService nieruchomosciOnlineService,
-            IMapper mapper,
             IPropertyDataRepository propertyDataRepository,
             ReadCache cache,
             IOfferSnapshotCache offers,
+            PropertyHistoryCache historyCache,
             ILogger<RealEstateServices> logger)
         {
             _olxApiService = olxApiService;
             _morizonApiService = morizonApiService;
             _nieruchomosciOnlineService = nieruchomosciOnlineService;
-            _mapper = mapper;
             _propertyDataRepository = propertyDataRepository;
             _cache = cache;
             _offers = offers;
+            _historyCache = historyCache;
             _logger = logger;
         }
 
@@ -65,7 +65,7 @@ namespace AF_mobile_web_api.Services
             return await _cache.GetAsync(cacheKey, StatisticServices.CacheDuration, async () =>
             {
                 var latestBatch = await _propertyDataRepository.GetLatestByCityAsync(city.ToString());
-                return _mapper.Map<List<SearchData>>(latestBatch);
+                return latestBatch.Select(PropertyMapping.ToSearchData).ToList();
             });
         }
 
@@ -95,7 +95,18 @@ namespace AF_mobile_web_api.Services
             return new MarketplaceSearch();
         }
 
-        public async Task<MarketplaceSearch> LoadDataMarkeplacesAsync(CityEnum city = CityEnum.Krakow)
+        public Task<MarketplaceSearch> LoadDataMarkeplacesAsync(CityEnum city = CityEnum.Krakow) =>
+            ScrapeCityAsync(city, null);
+
+        public async Task ScrapeWeeklyCityAsync(long runId, CityEnum city)
+        {
+            // The previous worker may have committed between the poll and acquiring the runner.
+            var saved = await _propertyDataRepository.GetWeeklyCitiesAsync(runId);
+            if (saved.Any(row => row.City == city.ToString())) return;
+            await ScrapeCityAsync(city, runId);
+        }
+
+        private async Task<MarketplaceSearch> ScrapeCityAsync(CityEnum city, long? runId)
         {
             // Start all three scrapes concurrently, but await each one separately so a single
             // failing source does not discard the results of the healthy ones.
@@ -116,12 +127,20 @@ namespace AF_mobile_web_api.Services
             };
             var failures = new[] { olxData.Error, morizonData.Error, nieruchomosciData.Error }
                 .OfType<Exception>().ToList();
+            var checkpoint = runId.HasValue ? new WeeklyScrapeCity
+            {
+                RunId = runId.Value,
+                City = city.ToString(),
+                Error = failures.Count > 0 ? string.Join(" ", failures.Select(e => e.Message)) : null
+            } : null;
 
             if (combinedData.Data.Count == 0)
             {
                 // Saving an empty batch would become the "latest" snapshot downstream
                 // (GetLatestByCityAsync) and wipe the dashboard until the next scrape.
                 _logger.LogError("All marketplace sources returned no data for {City}; skipping save", city);
+                if (checkpoint != null)
+                    await _propertyDataRepository.SaveWeeklyCityAsync(new List<PropertyData>(), checkpoint);
                 if (failures.Count > 0) throw new AggregateException(failures);
                 return combinedData;
             }
@@ -142,7 +161,7 @@ namespace AF_mobile_web_api.Services
             }
             combinedData.Data = uniqueByUrl;
 
-            var propertiesList = _mapper.Map<List<PropertyData>>(combinedData.Data);
+            var propertiesList = combinedData.Data.Select(PropertyMapping.ToPropertyData).ToList();
 
             // Stamp every row of this scrape with the same timestamp so it forms one identifiable
             // batch: GetLatestByCityAsync selects the newest batch for the snapshot charts.
@@ -153,7 +172,15 @@ namespace AF_mobile_web_api.Services
                 property.AddedRecordTime = scrapeTime;
             }
 
-            await _propertyDataRepository.SaveMarketplaceDataAsync(propertiesList);
+            if (checkpoint == null)
+                await _propertyDataRepository.SaveMarketplaceDataAsync(propertiesList);
+            else
+            {
+                await _propertyDataRepository.SaveWeeklyCityAsync(propertiesList, checkpoint);
+                _logger.LogInformation("Weekly scrape {RunId} saved {Count} offers for {City}, including {OlxCount} from OLX",
+                    checkpoint.RunId, propertiesList.Count, city, propertiesList.Count(p => p.WebName == (int)WebName.OLX));
+            }
+            _historyCache.Invalidate();
 
             // StatisticServices caches these entries for 120 minutes, per city and per area of
             // cities (CityArea); evict every one that includes this city so dashboards pick up
@@ -210,7 +237,7 @@ namespace AF_mobile_web_api.Services
                 var key = (item.Area, item.Floor, item.Market, item.Price);
                 if (!uniqueDict.TryGetValue(key, out var unique))
                 {
-                    uniqueDict[key] = _mapper.Map<SearchDataDTO>(item);
+                    uniqueDict[key] = PropertyMapping.ToDto(item);
                 }
                 else
                 {
