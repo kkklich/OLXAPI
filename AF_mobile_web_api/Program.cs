@@ -10,7 +10,16 @@ using System;
 using System.IO.Compression;
 using System.Reflection;
 
-var builder = WebApplication.CreateBuilder(args);
+var weeklyScrape = args.FirstOrDefault() == "--weekly-scrape";
+long runId = 0;
+if (weeklyScrape && (args.Length != 2 || !long.TryParse(args[1], out runId) || runId <= 0))
+{
+    Console.Error.WriteLine("Usage: --weekly-scrape <positive run ID>");
+    Environment.ExitCode = 2;
+    return;
+}
+
+var builder = WebApplication.CreateBuilder(weeklyScrape ? [] : args);
 
 // Get the port from environment variable (Render sets this automatically)
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5016";
@@ -111,6 +120,13 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+if (weeklyScrape)
+{
+    await using var host = app;
+    Environment.ExitCode = await WeeklyScrapeCommand.RunAsync(host.Services, runId);
+    return;
+}
 
 app.UseResponseCompression();
 

@@ -175,7 +175,11 @@ namespace AF_mobile_web_api.Services
             if (checkpoint == null)
                 await _propertyDataRepository.SaveMarketplaceDataAsync(propertiesList);
             else
+            {
                 await _propertyDataRepository.SaveWeeklyCityAsync(propertiesList, checkpoint);
+                _logger.LogInformation("Weekly scrape {RunId} saved {Count} offers for {City}, including {OlxCount} from OLX",
+                    checkpoint.RunId, propertiesList.Count, city, propertiesList.Count(p => p.WebName == (int)WebName.OLX));
+            }
             _historyCache.Invalidate();
 
             // StatisticServices caches these entries for 120 minutes, per city and per area of
