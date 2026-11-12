@@ -6,6 +6,9 @@ using Microsoft.Net.Http.Headers;
 using AF_mobile_web_api.Filters;
 using AF_mobile_web_api.Services.Interfaces;
 using AF_mobile_web_api.DTO;
+using AF_mobile_web_api.DTO.Enums;
+using AF_mobile_web_api.Services;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace AF_mobile_web_api.Controllers
 {
@@ -91,6 +94,30 @@ namespace AF_mobile_web_api.Controllers
             return _scrapeRunner.TryStart("GetdataForManyCities", s => s.GetdataForManyCitiesAsync())
                 ? Accepted(new { message = "Scrape started for all cities" })
                 : Conflict(new { message = "A scrape is already running" });
+        }
+
+        // Each poll uses the same Actions run ID, including after a workflow rerun.
+        // The database decides which city is next even if the API process has changed.
+        [HttpPost("weeklyScrapes/{runId:long:min(1)}")]
+        public async Task<IActionResult> AdvanceWeeklyScrape(long runId, [FromServices] IPropertyDataRepository propertyRepo,
+            [FromQuery] int attempt = 1)
+        {
+            var lastJob = _scrapeRunner.Status;
+            var saved = await propertyRepo.GetWeeklyCitiesAsync(runId);
+            var completed = saved.Select(row => row.City).ToHashSet();
+            foreach (var city in Enum.GetValues<CityEnum>())
+            {
+                if (completed.Contains(city.ToString())) continue;
+                var jobName = $"Weekly {runId}/{attempt} {city}";
+                if (lastJob.JobName == jobName && lastJob.LastRunSucceeded == false)
+                    return Conflict(new { city = city.ToString(), error = lastJob.LastError });
+                var started = _scrapeRunner.TryStart(jobName, s => s.ScrapeWeeklyCityAsync(runId, city));
+                return Accepted(new { city = city.ToString(), started, completedCities = completed.Count });
+            }
+
+            var errors = saved.Where(row => row.Error != null).Select(row => row.Error).ToArray();
+            if (errors.Length > 0) return UnprocessableEntity(new { errors });
+            return Ok(new { completedCities = completed.Count });
         }
 
         [HttpGet("scrapeStatus")]
@@ -263,9 +290,10 @@ namespace AF_mobile_web_api.Controllers
         }
 
         [HttpGet("propertyHistory/{city}")]
-        public async Task<IActionResult> GetPropertyHistory(string city, [FromQuery] string url)
+        [EnableRateLimiting(PropertyHistoryRateLimiting.PolicyName)]
+        public async Task<IActionResult> GetPropertyHistory(string city, [FromQuery] string url, CancellationToken cancellationToken = default)
         {
-            var history = await _list.GetHistoryAsync(city, url);
+            var history = await _list.GetHistoryAsync(city, url, cancellationToken);
             return history is null ? NotFound() : Ok(history);
         }
     }

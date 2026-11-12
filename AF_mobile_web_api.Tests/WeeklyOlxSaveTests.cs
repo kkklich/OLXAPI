@@ -2,12 +2,10 @@ using System.Net;
 using AF_mobile_web_api.Controllers;
 using AF_mobile_web_api.Domain;
 using AF_mobile_web_api.DTO.Enums;
-using AF_mobile_web_api.Mappings;
 using AF_mobile_web_api.Repositories.Interfaces;
 using AF_mobile_web_api.Services;
 using AF_mobile_web_api.Services.Interfaces;
 using ApplicationDatabase.Models;
-using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Caching.Memory;
@@ -79,9 +77,10 @@ public class WeeklyOlxSaveTests
             .Callback<List<PropertyData>>(rows => batches.Add(rows)).Returns(Task.CompletedTask);
         var snapshots = new Mock<IOfferSnapshotCache>();
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var mapper = new MapperConfiguration(config => config.AddProfile<MappingProfile>()).CreateMapper();
-        var realEstate = new RealEstateServices(olx, morizon.Object, online.Object, mapper,
-            repository.Object, new ReadCache(cache), snapshots.Object, NullLogger<RealEstateServices>.Instance);
+        using var historyCache = new PropertyHistoryCache();
+        var realEstate = new RealEstateServices(olx, morizon.Object, online.Object,
+            repository.Object, new ReadCache(cache), snapshots.Object, historyCache,
+            NullLogger<RealEstateServices>.Instance);
         using var services = new ServiceCollection().AddSingleton<IRealEstateServices>(realEstate).BuildServiceProvider();
         var runner = new ScrapeJobRunner(services.GetRequiredService<IServiceScopeFactory>(), NullLogger<ScrapeJobRunner>.Instance);
         var controller = new RealEstateController(realEstate, Mock.Of<IStatisticServices>(),

@@ -33,7 +33,7 @@ namespace AF_mobile_web_api.Services
             lock (_gate)
             {
                 if (_status.IsRunning) return false;
-                _status = new ScrapeJobStatus(IsRunning: true);
+                _status = new ScrapeJobStatus(IsRunning: true, JobName: jobName);
             }
 
             _ = Task.Run(async () =>
@@ -59,7 +59,7 @@ namespace AF_mobile_web_api.Services
                 }
                 finally
                 {
-                    lock (_gate) _status = new ScrapeJobStatus(false, failure == null, DateTimeOffset.UtcNow, failure);
+                    lock (_gate) _status = new ScrapeJobStatus(false, failure == null, DateTimeOffset.UtcNow, failure, jobName);
                 }
             });
 
