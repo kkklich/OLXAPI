@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref_name == 'render' && github.sha || 'render' }}
+          ref: ${{ github.ref == 'refs/heads/main' && github.sha || 'refs/heads/main' }}
           persist-credentials: false
       - uses: actions/setup-dotnet@v4
         with:

@@ -443,8 +443,8 @@ as incomplete. Configure these defaults with `OlxScrape__MaxConcurrentBuckets`,
 `OlxScrape__RetryDelayMilliseconds` (default 2000), and
 `OlxScrape__PageDelayMilliseconds` (default 250).
 
-The weekly workflow runs on Sundays at 11:00 Warsaw time from the default
-branch and builds the production scraper from `render` on GitHub Actions.
+The weekly workflow runs on Sundays at 11:00 Warsaw time and builds the
+production scraper from `main` on GitHub Actions.
 It connects to MySQL using the existing `CONNECTIONSTRINGS__CONNECTIONSTRING` secret.
 The scraper saves each city's offers and source errors together. A city with
 incomplete sources keeps usable offers, and the workflow reports failures after
