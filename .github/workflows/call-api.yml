@@ -2,139 +2,15 @@ name: Weekly API Call
 
 on:
   schedule:
-    # Every Sunday at 11:00 Warsaw time (automatically adjusts for DST)
     - cron: '0 11 * * 0'
       timezone: 'Europe/Warsaw'
-  workflow_dispatch: # Allows manual run
+  workflow_dispatch:
 
-concurrency:
-  group: weekly-marketplace-scrape
-  cancel-in-progress: false
+permissions:
+  contents: read
 
 jobs:
   call-api:
-    runs-on: ubuntu-latest
-    timeout-minutes: 240
-
-    steps:
-      - name: Wake up Render and run weekly scrape
-        env:
-          SCRAPE_API_KEY: ${{ secrets.SCRAPE_API_KEY }}
-          RENDER_URL: "https://olxapi-jwcz.onrender.com"
-        run: |
-          set -euo pipefail
-
-          echo "============================================================"
-          echo "Step 1: Waking up Render service (cold start)..."
-          echo "============================================================"
-          WAKE_START=$(date +%s)
-          while true; do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${RENDER_URL}/api/Health" || echo "000")
-            echo "$(date -u +'%T') - Ping /api/Health: HTTP $HTTP_CODE"
-
-            if [ "$HTTP_CODE" -eq 200 ]; then
-              echo "Render instance is awake and healthy!"
-              break
-            fi
-
-            ELAPSED=$(( $(date +%s) - WAKE_START ))
-            if [ "$ELAPSED" -ge 300 ]; then
-              echo "Error: Server failed to wake up within 5 minutes."
-              exit 1
-            fi
-            sleep 10
-          done
-
-          # Fail before downloading thousands of listings if they cannot be saved.
-          if ! DB_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 \
-            -H "X-Api-Key: ${SCRAPE_API_KEY}" "${RENDER_URL}/api/Health/db"); then
-            DB_STATUS="000"
-          fi
-          if [ "$DB_STATUS" != "200" ]; then
-            echo "Error: Database is not reachable (HTTP $DB_STATUS); no scrape was started."
-            exit 1
-          fi
-
-          # Remember the previous save/completion so an old successful result, a
-          # debug-only scrape or an API restart cannot be mistaken for a new save.
-          BASELINE_JSON=$(curl --fail -sS --max-time 20 "${RENDER_URL}/api/RealEstate/scrapeStatus")
-          if ! jq -e '(.isRunning | type) == "boolean"' <<< "$BASELINE_JSON" > /dev/null; then
-            echo "Error: Could not read the current scrape status."
-            exit 1
-          fi
-          BASELINE_SAVED_AT=$(jq -r '.lastScrapedAt // ""' <<< "$BASELINE_JSON")
-          BASELINE_COMPLETED_AT=$(jq -r '.lastCompletedAt // ""' <<< "$BASELINE_JSON")
-
-          echo ""
-          echo "============================================================"
-          echo "Step 2: Triggering scrape job..."
-          echo "============================================================"
-          INIT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 \
-            -H "X-Api-Key: ${SCRAPE_API_KEY}" \
-            -X GET "${RENDER_URL}/api/RealEstate/getdataForManyCities" || echo "000")
-
-          echo "Trigger response: HTTP $INIT_STATUS"
-          if [ "$INIT_STATUS" == "202" ]; then
-            echo "Scrape successfully started."
-          elif [ "$INIT_STATUS" == "409" ]; then
-            echo "A scrape is already in progress, monitoring existing run."
-          elif [ "$INIT_STATUS" == "401" ]; then
-            echo "Error: HTTP 401 Unauthorized. Please verify SCRAPE_API_KEY secret in GitHub repository settings."
-            exit 1
-          else
-            echo "Error: Unexpected trigger status HTTP $INIT_STATUS"
-            exit 1
-          fi
-
-          echo ""
-          echo "============================================================"
-          echo "Step 3: Keeping Render alive and waiting for completion..."
-          echo "============================================================"
-          POLL_START=$(date +%s)
-          # Give background job time to initialize
-          sleep 30
-
-          while true; do
-            CURRENT_TIME=$(date -u +'%T')
-            ELAPSED_MIN=$(( ($(date +%s) - POLL_START) / 60 ))
-
-            if [ "$ELAPSED_MIN" -ge 225 ]; then
-              echo "Error: Scrape did not complete within 225 minutes."
-              exit 1
-            fi
-            STATUS_JSON=$(curl --fail -s --max-time 20 "${RENDER_URL}/api/RealEstate/scrapeStatus" || echo '{}')
-            IS_RUNNING=$(jq -r 'if (.isRunning | type) == "boolean" then .isRunning else "unknown" end' <<< "$STATUS_JSON" 2>/dev/null || echo unknown)
-
-            if [ "$IS_RUNNING" == "false" ]; then
-              SUCCEEDED=$(jq -r 'if (.lastRunSucceeded | type) == "boolean" then .lastRunSucceeded else "unknown" end' <<< "$STATUS_JSON")
-              if [ "$SUCCEEDED" != "true" ]; then
-                echo "Error: Scrape stopped without a successful result. Status:"
-                jq '{isRunning, lastRunSucceeded, lastCompletedAt, lastError}' <<< "$STATUS_JSON"
-                exit 1
-              fi
-              SAVED_AT=$(jq -r '.lastScrapedAt // ""' <<< "$STATUS_JSON")
-              COMPLETED_AT=$(jq -r '.lastCompletedAt // ""' <<< "$STATUS_JSON")
-              if [ -z "$SAVED_AT" ] || [ "$SAVED_AT" == "$BASELINE_SAVED_AT" ] \
-                || [ -z "$COMPLETED_AT" ] || [ "$COMPLETED_AT" == "$BASELINE_COMPLETED_AT" ]; then
-                echo "Error: No new completed database save was confirmed; refusing to report an old or debug-only run as successful."
-                exit 1
-              fi
-              echo "$CURRENT_TIME (${ELAPSED_MIN}m elapsed) - Scrape finished and a new database batch was confirmed at $SAVED_AT."
-              break
-            elif [ "$IS_RUNNING" == "true" ]; then
-              echo "$CURRENT_TIME (${ELAPSED_MIN}m elapsed) - Scrape in progress. Keeping Render alive..."
-            else
-              # Keep the service awake through temporary status failures.
-              HEALTH_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "${RENDER_URL}/api/Health" || echo "000")
-              echo "$CURRENT_TIME (${ELAPSED_MIN}m elapsed) - Heartbeat ping: HTTP $HEALTH_CODE. Keeping Render alive..."
-
-            fi
-
-            # Ping every 45 seconds (Render free tier sleeps after 15 minutes of inactivity)
-            sleep 45
-          done
-
-          echo ""
-          echo "============================================================"
-          echo "Scrape cycle completed successfully!"
-          echo "============================================================"
+    uses: kkklich/OLXAPI/.github/workflows/call-api.yml@render
+    secrets:
+      CONNECTIONSTRINGS__CONNECTIONSTRING: ${{ secrets.CONNECTIONSTRINGS__CONNECTIONSTRING }}
